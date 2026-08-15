@@ -38,3 +38,7 @@ target/
 
 # Logs
 *.log
+
+# Terraform sensitive/local files
+*.tfplan
+*.tfplan.json
