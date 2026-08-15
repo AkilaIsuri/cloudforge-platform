@@ -32,7 +32,7 @@ Coming Soon
 
 The application can be deployed locally on Kubernetes using Minikube.
 
-# Prerequisites
+### Prerequisites
 
 Make sure the following are installed:
 
@@ -169,29 +169,29 @@ Service unavailable: minikube service user-service initially failed because the 
 
 Useful Commands
 
-# Start Minikube
+### Start Minikube
 minikube start --driver=docker
 
-# Check cluster
+### Check cluster
 kubectl get nodes
 
-# Check Pods
+### Check Pods
 kubectl get pods
 
-# Check Services
+### Check Services
 kubectl get services
 
-# View Pod details
+### View Pod details
 kubectl describe pod <pod-name>
 
-# View application logs
+### View application logs
 kubectl logs <pod-name>
 
-# Apply Kubernetes manifests
+### Apply Kubernetes manifests
 kubectl apply -f .
 
-# Access the application
+### Access the application
 minikube service user-service
 
-# Stop Minikube
+### Stop Minikube
 minikube stop
