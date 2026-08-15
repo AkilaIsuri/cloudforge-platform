@@ -18,3 +18,9 @@ variable "subnet_name" {
     type = string
     
 }
+
+variable "map_public_ip_on_launch" {
+  description = "Whether instances launched in the subnet should receive a public IP"
+  type        = bool
+  default     = false
+}

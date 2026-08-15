@@ -18,19 +18,21 @@ module "vpc" {
 }
 
 module "public_subnet_a" {
-  source            = "./modules/subnet"
-  vpc_id            = module.vpc.vpc_id
-  cidr_block        = var.public_subnet_a_cidr
-  availability_zone = var.public_subnet_a_az
-  subnet_name       = "public-subnet-a"
+  source                  = "./modules/subnet"
+  vpc_id                  = module.vpc.vpc_id
+  cidr_block              = var.public_subnet_a_cidr
+  availability_zone       = var.public_subnet_a_az
+  map_public_ip_on_launch = true
+  subnet_name             = "public-subnet-a"
 }
 
 module "public_subnet_b" {
-  source            = "./modules/subnet"
-  vpc_id            = module.vpc.vpc_id
-  cidr_block        = var.public_subnet_b_cidr
-  availability_zone = var.public_subnet_b_az
-  subnet_name       = "public-subnet-b"
+  source                  = "./modules/subnet"
+  vpc_id                  = module.vpc.vpc_id
+  cidr_block              = var.public_subnet_b_cidr
+  availability_zone       = var.public_subnet_b_az
+  map_public_ip_on_launch = true
+  subnet_name             = "public-subnet-b"
 }
 
 resource "aws_route_table_association" "public_a" {
@@ -41,4 +43,23 @@ resource "aws_route_table_association" "public_a" {
 resource "aws_route_table_association" "public_b" {
   subnet_id      = module.public_subnet_b.subnet_id
   route_table_id = module.vpc.public_route_table_id
+}
+
+
+module "private_subnet_a" {
+  source                  = "./modules/subnet"
+  vpc_id                  = module.vpc.vpc_id
+  cidr_block              = var.private_subnet_a_cidr
+  availability_zone       = var.private_subnet_a_az
+  map_public_ip_on_launch = false
+  subnet_name             = "private-subnet-a"
+}
+
+module "private_subnet_b" {
+  source                  = "./modules/subnet"
+  vpc_id                  = module.vpc.vpc_id
+  cidr_block              = var.private_subnet_b_cidr
+  availability_zone       = var.private_subnet_b_az
+  map_public_ip_on_launch = false
+  subnet_name             = "private-subnet-b"
 }

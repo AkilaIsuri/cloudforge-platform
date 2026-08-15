@@ -12,3 +12,13 @@ output "public_subnet_b_id" {
   description = "ID of the public subnet B"
   value       = module.public_subnet_b.subnet_id
 }
+
+output "private_subnet_a_id" {
+  description = "ID of the private subnet A"
+  value       = module.private_subnet_a.subnet_id
+}
+
+output "private_subnet_b_id" {
+  description = "ID of the private subnet B"
+  value       = module.private_subnet_b.subnet_id
+}

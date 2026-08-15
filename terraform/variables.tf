@@ -23,3 +23,23 @@ variable "public_subnet_b_az" {
   type        = string
 }
 
+variable "private_subnet_a_cidr" {
+  description = "CIDR block for the private subnet A"
+  type        = string
+}
+
+variable "private_subnet_a_az" {
+  description = "Availability zone for the private subnet A"
+  type        = string
+}
+
+variable "private_subnet_b_cidr" {
+  description = "CIDR block for the private subnet B"
+  type        = string
+}
+
+variable "private_subnet_b_az" {
+  description = "Availability zone for the private subnet B"
+  type        = string
+}
+
