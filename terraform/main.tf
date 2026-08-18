@@ -63,3 +63,41 @@ module "private_subnet_b" {
   map_public_ip_on_launch = false
   subnet_name             = "private-subnet-b"
 }
+
+resource "aws_eip" "nat" {
+  domain = "vpc"
+
+  tags = {
+    Name = "cloudforge-nat-eip"
+  }
+}
+
+
+resource "aws_nat_gateway" "main" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = module.public_subnet_a.subnet_id
+
+  tags = {
+    Name = "cloudforge-nat-gateway"
+  }
+
+  depends_on = [module.vpc]
+}
+
+resource "aws_route_table" "private" {
+  vpc_id = module.vpc.vpc_id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.main.id
+  }
+
+  tags = {
+    Name = "cloudforge-private-rt"
+  }
+}
+
+
+module "iam" {
+  source = "./modules/iam"
+}
