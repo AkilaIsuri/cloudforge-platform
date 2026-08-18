@@ -101,3 +101,24 @@ resource "aws_route_table" "private" {
 module "iam" {
   source = "./modules/iam"
 }
+
+
+
+module "eks" {
+  source = "./modules/eks"
+
+  cluster_name     = "cloudforge-eks"
+  cluster_role_arn = module.iam.eks_cluster_role_arn
+
+  subnet_ids = [
+    module.private_subnet_a.subnet_id,
+    module.private_subnet_b.subnet_id
+  ]
+
+  node_role_arn = module.iam.eks_node_role_arn
+
+  node_subnet_ids = [
+    module.private_subnet_a.subnet_id,
+    module.private_subnet_b.subnet_id
+  ]
+}
