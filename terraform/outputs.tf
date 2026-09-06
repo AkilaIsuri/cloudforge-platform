@@ -22,3 +22,8 @@ output "private_subnet_b_id" {
   description = "ID of the private subnet B"
   value       = module.private_subnet_b.subnet_id
 }
+
+output "ecr_repository_url" {
+  description = "ECR repository URL for the user service"
+  value       = module.ecr.repository_url
+}

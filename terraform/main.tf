@@ -133,3 +133,9 @@ resource "aws_route_table_association" "private_b" {
   subnet_id      = module.private_subnet_b.subnet_id
   route_table_id = aws_route_table.private.id
 }
+
+module "ecr" {
+  source = "./modules/ecr"
+
+  repository_name = var.ecr_repository_name
+}
