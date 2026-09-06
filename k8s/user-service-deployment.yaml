@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: user-service
+  namespace: cloudforge
 spec:
   replicas: 1
   selector:
@@ -14,7 +15,7 @@ spec:
     spec:
       containers:
         - name: user-service
-          image: cloudforge/user-service:1.0 
+          image: 761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:1.0 
           ports:
             - containerPort: 8080
           env:
