@@ -145,3 +145,24 @@ resource "aws_iam_role_policy" "github_actions_ecr" {
     ]
   })
 }
+
+resource "aws_iam_role_policy" "github_actions_eks" {
+  name = "cloudforge-github-actions-eks"
+  role = aws_iam_role.github_actions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+
+    Statement = [
+      {
+        Effect = "Allow"
+
+        Action = [
+          "eks:DescribeCluster"
+        ]
+
+        Resource = "arn:aws:eks:us-east-1:761558631184:cluster/cloudforge-eks"
+      }
+    ]
+  })
+}
