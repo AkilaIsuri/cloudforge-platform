@@ -42,3 +42,7 @@ target/
 # Terraform sensitive/local files
 *.tfplan
 *.tfplan.json
+
+
+# Kubernetes secrets
+k8s/*secret*.yaml

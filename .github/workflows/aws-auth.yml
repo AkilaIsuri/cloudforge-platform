@@ -23,5 +23,22 @@ jobs:
           role-to-assume: arn:aws:iam::761558631184:role/cloudforge-github-actions-role
           aws-region: us-east-1
 
-      - name: Verify AWS identity
-        run: aws sts get-caller-identity
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t cloudforge-user-service:${GITHUB_SHA} \
+            ./applications/user-service
+
+      - name: Tag Docker image
+        run: |
+          docker tag \
+            cloudforge-user-service:${GITHUB_SHA} \
+            761558631184.dkr.ecr.us-east-1.amazonaws.com/cloudforge-user-service:${GITHUB_SHA}
+
+      - name: Push Docker image
+        run: |
+          docker push \
+            761558631184.dkr.ecr.us-east-1.amazonaws.com/cloudforge-user-service:${GITHUB_SHA}

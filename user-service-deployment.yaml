@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    kompose.cmd: C:\Users\Akila_10847\bin\kompose.exe convert -f docker-compose.yml
+    kompose.version: 1.38.0 (a8f5d1cbd)
+  labels:
+    io.kompose.service: user-service
+  name: user-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      io.kompose.service: user-service
+  template:
+    metadata:
+      annotations:
+        kompose.cmd: C:\Users\Akila_10847\bin\kompose.exe convert -f docker-compose.yml
+        kompose.version: 1.38.0 (a8f5d1cbd)
+      labels:
+        io.kompose.service: user-service
+    spec:
+      containers:
+        - env:
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: cloudforge
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://postgres:5432/cloudforge
+            - name: SPRING_DATASOURCE_USERNAME
+              value: cloudforge
+          image: cloudforge/user-service:1.0
+          name: user-service
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+      restartPolicy: Always
