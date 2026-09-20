@@ -29,16 +29,16 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
-            -t cloudforge-user-service:${GITHUB_SHA} \
+            -t user-service:1.0 \
             ./applications/user-service
 
       - name: Tag Docker image
         run: |
           docker tag \
-            cloudforge-user-service:${GITHUB_SHA} \
-            761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:${GITHUB_SHA}
+            user-service:1.0 \
+            761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:1.0
 
       - name: Push Docker image
         run: |
           docker push \
-            761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:${GITHUB_SHA}
+            761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:1.0
