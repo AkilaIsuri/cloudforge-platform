@@ -42,3 +42,9 @@ jobs:
         run: |
           docker push \
             761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:1.0
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+          --region us-east-1 \
+          --name cloudforge-eks     
