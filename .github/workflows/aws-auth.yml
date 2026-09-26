@@ -29,19 +29,19 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
-            -t user-service:1.0 \
+            -t user-service:${GITHUB_SHA}\
             ./applications/user-service
 
       - name: Tag Docker image
         run: |
           docker tag \
-            user-service:1.0 \
-            761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:1.0
+            user-service:${GITHUB_SHA} \
+            761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:${GITHUB_SHA}
 
       - name: Push Docker image
         run: |
           docker push \
-            761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:1.0
+            761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:${GITHUB_SHA}
 
       - name: Update kubeconfig
         run: |
@@ -52,3 +52,13 @@ jobs:
       - name: Verify EKS cluster access
         run: |
           kubectl get po -n cloudforge  
+
+      - name: Update Kubernetes deployment
+        run: |
+          kubectl set image deployment/user-service \
+            user-service=761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:${GITHUB_SHA} \
+            -n cloudforge   
+
+      - name: Verify deployment rollout
+        run: |
+          kubectl rollout status deployment/user-service -n cloudforge     
