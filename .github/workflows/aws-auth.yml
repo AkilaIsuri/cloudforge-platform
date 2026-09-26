@@ -7,7 +7,7 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write
 
 jobs:
   aws-auth:
@@ -50,3 +50,12 @@ jobs:
       - name: Verify Helm image tag
         run: |
           grep -A4 "image:" helm/cloudforge/values.yaml
+
+      - name: Commit updated Helm image tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add helm/cloudforge/values.yaml
+          git commit -m "Update user-service image to ${GITHUB_SHA}"
+          git push

@@ -16,8 +16,9 @@ spec:
       containers:
         - name: user-service
           image: "{{ .Values.userService.image.repository }}:{{ .Values.userService.image.tag }}"
+          imagePullPolicy: {{ .Values.userService.image.pullPolicy }}
           ports:
-            - containerPort: 8080
+            - containerPort: {{ .Values.userService.containerPort }}
           env:
             - name: SPRING_DATASOURCE_URL
               value: jdbc:postgresql://postgres:5432/cloudforge

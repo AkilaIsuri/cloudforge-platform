@@ -4,10 +4,10 @@ metadata:
   name: user-service
   namespace: cloudforge
 spec:
-  type: LoadBalancer
+  type: {{ .Values.userService.service.type }}
   selector:
     app: user-service
   ports:
     - protocol: TCP
-      port: 8080
-      targetPort: 8080
+      port: {{ .Values.userService.service.port }}
+      targetPort: {{ .Values.userService.service.targetPort }}
