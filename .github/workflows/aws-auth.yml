@@ -48,3 +48,7 @@ jobs:
           aws eks update-kubeconfig \
           --region us-east-1 \
           --name cloudforge-eks     
+      
+      - name: Verify EKS cluster access
+        run: |
+          kubectl get po -n cloudforge  
