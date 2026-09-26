@@ -3,7 +3,7 @@ userService:
 
   image:
     repository: 761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service
-    tag: "13d399fa813bf8f4f135ddb603531e718d8570ad"
+    tag: "20c60e5c3c64607c5f2a216e25b8f4628675fa89"
     pullPolicy: IfNotPresent
 
   containerPort: 8080
