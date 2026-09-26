@@ -1,7 +1,14 @@
 userService:
-  replicaCount: 1
+  replicaCount: 3
 
   image:
     repository: 761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service
-    tag: "1.0"
+    tag: "13d399fa813bf8f4f135ddb603531e718d8570ad"
     pullPolicy: IfNotPresent
+
+  containerPort: 8080
+
+  service:
+    type: LoadBalancer
+    port: 8080
+    targetPort: 8080
