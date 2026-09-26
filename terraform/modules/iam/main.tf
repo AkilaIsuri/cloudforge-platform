@@ -140,7 +140,7 @@ resource "aws_iam_role_policy" "github_actions_ecr" {
           "ecr:UploadLayerPart"
         ]
 
-        Resource = "arn:aws:ecr:us-east-1:761558631184:repository/cloudforge-user-service"
+        Resource = "arn:aws:ecr:us-east-1:761558631184:repository/user-service"
       }
     ]
   })
