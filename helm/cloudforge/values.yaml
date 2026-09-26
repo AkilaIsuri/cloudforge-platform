@@ -1,0 +1,7 @@
+userService:
+  replicaCount: 1
+
+  image:
+    repository: 761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service
+    tag: "1.0"
+    pullPolicy: IfNotPresent
