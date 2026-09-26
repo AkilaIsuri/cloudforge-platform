@@ -8,6 +8,6 @@ public class HomeController {
 
     @GetMapping("/")
     public String home() {
-        return "Welcome to CloudForge User Service!";
+        return "Welcome to CloudForge User Service! You are valued";
     }
 }
