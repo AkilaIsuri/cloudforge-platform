@@ -43,22 +43,10 @@ jobs:
           docker push \
             761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:${GITHUB_SHA}
 
-      - name: Update kubeconfig
+      - name: Update Helm image tag
         run: |
-          aws eks update-kubeconfig \
-          --region us-east-1 \
-          --name cloudforge-eks     
-      
-      - name: Verify EKS cluster access
-        run: |
-          kubectl get po -n cloudforge  
+          sed -i "s/^    tag: .*/    tag: \"${GITHUB_SHA}\"/" helm/cloudforge/values.yaml
 
-      - name: Update Kubernetes deployment
+      - name: Verify Helm image tag
         run: |
-          kubectl set image deployment/user-service \
-            user-service=761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service:${GITHUB_SHA} \
-            -n cloudforge   
-
-      - name: Verify deployment rollout
-        run: |
-          kubectl rollout status deployment/user-service -n cloudforge     
+          grep -A4 "image:" helm/cloudforge/values.yaml
