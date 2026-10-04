@@ -9,5 +9,6 @@ spec:
     app: user-service
   ports:
     - protocol: TCP
+      name: http
       port: {{ .Values.userService.service.port }}
       targetPort: {{ .Values.userService.service.targetPort }}
