@@ -11,6 +11,7 @@ steps, so the same kind of issue can be solved faster next time.
 | 3 | [order-service unit tests failed (`mvn test`)](#3-order-service-unit-tests-failed-mvn-test) | Build / tests | Spring test config / Mockito |
 | 4 | [Grafana showed a scaled-down service as UP while its alert was firing](#4-grafana-showed-a-scaled-down-service-as-up-while-its-alert-was-firing) | Local Kubernetes | Monitoring / dashboards |
 | 5 | [SonarCloud: "Not authorized or organization not found"](#5-sonarcloud-not-authorized-or-organization-not-found) | CI (GitHub Actions) | Security scanning / SonarCloud |
+| 6 | [Unable to resolve action `aquasecurity/trivy-action@0.28.0`](#6-unable-to-resolve-action-aquasecuritytrivy-action0280) | CI (GitHub Actions) | Workflow dependencies |
 
 ---
 
@@ -242,6 +243,37 @@ curl -s "https://sonarcloud.io/api/components/show?component=AkilaIsuri_cloudfor
 ```
 **Lesson:** use the *key* fields from SonarCloud's **Information** page, not the names shown in the
 UI. When an error says "A or B", rule out each cause separately.
+
+---
+
+## 6. Unable to resolve action `aquasecurity/trivy-action@0.28.0`
+
+**Stage:** CI – the Trivy jobs failed before any step ran ("Prepare all required actions")
+
+### Problem
+```
+Error: Unable to resolve action `aquasecurity/trivy-action@0.28.0`, unable to find version `0.28.0`
+```
+
+### Root cause
+The action's maintainers renamed their release tags to use a `v` prefix (`v0.28.0`, …). A workflow
+pins an action to a **Git tag**; when that tag no longer exists, GitHub cannot download the action.
+
+### Solution
+Pinned to the current release `aquasecurity/trivy-action@v0.36.0` in `ci-cd.yml` and
+`iac-security.yml`, and checked that every other `uses:` reference resolves.
+
+### How it was diagnosed
+```bash
+# Which tags exist?
+curl -s "https://api.github.com/repos/aquasecurity/trivy-action/tags?per_page=15"
+# Does a specific ref exist? (200 = yes, 404 = no)
+curl -s -o /dev/null -w '%{http_code}\n' \
+  https://api.github.com/repos/aquasecurity/trivy-action/git/ref/tags/v0.36.0
+```
+**Lesson:** pinned versions can disappear. Check action tags on GitHub when pinning. For stronger
+supply-chain security, pin third-party actions to a full **commit SHA** (immutable) and let
+Dependabot propose updates.
 
 ---
 
