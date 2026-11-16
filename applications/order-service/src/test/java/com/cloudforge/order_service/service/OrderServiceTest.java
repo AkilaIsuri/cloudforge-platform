@@ -9,10 +9,10 @@ import com.cloudforge.order_service.dto.CreateOrderRequest;
 import com.cloudforge.order_service.entity.Order;
 import com.cloudforge.order_service.entity.OrderStatus;
 import com.cloudforge.order_service.repository.OrderRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
@@ -29,6 +29,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -43,11 +44,16 @@ class OrderServiceTest {
     @Mock private ProductClient productClient;
     @Mock private PaymentClient paymentClient;
 
-    @InjectMocks
+    /** Real in-memory metrics registry, so tests can check the business counters */
+    private SimpleMeterRegistry meterRegistry;
+
     private OrderService orderService;
 
     @BeforeEach
     void setUp() {
+        meterRegistry = new SimpleMeterRegistry();
+        orderService = new OrderService(orderRepository, userClient, productClient, paymentClient, meterRegistry);
+
         lenient().when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
         lenient().when(userClient.userExists(1L)).thenReturn(true);
         lenient().when(productClient.getProduct(10L))
@@ -71,6 +77,9 @@ class OrderServiceTest {
         assertEquals(7L, order.getPaymentId());
         verify(productClient).reserve(10L, 2);
         verify(productClient, never()).release(anyLong(), anyInt());
+
+        assertEquals(1.0, meterRegistry.get("voltcart.orders").tag("status", "PAID").counter().count());
+        assertEquals(200.0, meterRegistry.get("voltcart.revenue").counter().count());
     }
 
     @Test
@@ -86,6 +95,7 @@ class OrderServiceTest {
 
     @Test
     void placeOrder_rollsBackEarlierItems_whenLaterItemOutOfStock() {
+        doNothing().when(productClient).reserve(10L, 1);
         doThrow(HttpClientErrorException.create(HttpStatus.CONFLICT, "Conflict", HttpHeaders.EMPTY, new byte[0], null))
                 .when(productClient).reserve(20L, 5);
 

@@ -1,0 +1,20 @@
+{{- /* Only rendered when Prometheus Operator (kube-prometheus-stack) is installed */}}
+{{- if and .Values.monitoring.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/ServiceMonitor") }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cloudforge-services
+  labels:
+    # kube-prometheus-stack only picks up ServiceMonitors labelled with its release name
+    release: {{ .Values.monitoring.prometheusRelease }}
+    {{- include "cloudforge.labels" . | nindent 4 }}
+spec:
+  # Every Spring Boot service Service carries this label
+  selector:
+    matchLabels:
+      cloudforge.io/metrics: "true"
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+{{- end }}

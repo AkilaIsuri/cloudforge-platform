@@ -1,0 +1,206 @@
+{{- /*
+Backup & recovery for PostgreSQL.
+
+  postgres-backups (PVC)     separate disk that holds the dumps (kept even after `helm uninstall`)
+  postgres-backup  (CronJob) pg_dump of every database on a schedule, keeps the newest N backups
+  postgres-restore (CronJob) suspended – never runs by itself; trigger it by hand to restore
+
+Run a backup now:      kubectl create job -n <ns> --from=cronjob/postgres-backup backup-manual
+Restore latest backup: kubectl create job -n <ns> --from=cronjob/postgres-restore restore-manual
+*/}}
+{{- $pg := .Values.postgres }}
+{{- if $pg.backup.enabled }}
+{{- $dbs := join " " $pg.databases }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-backups
+  labels:
+    app: postgres-backup
+    {{- include "cloudforge.labels" . | nindent 4 }}
+  annotations:
+    # Do not delete the backups when the release is uninstalled
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: ["ReadWriteOnce"]
+  {{- with $pg.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $pg.backup.storage }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  labels:
+    app: postgres-backup
+    {{- include "cloudforge.labels" . | nindent 4 }}
+spec:
+  schedule: {{ $pg.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: postgres-backup
+            {{- include "cloudforge.labels" . | nindent 12 }}
+        spec:
+          restartPolicy: OnFailure
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70        # "postgres" user in the postgres:alpine image
+            runAsGroup: 70
+            fsGroup: 70          # makes the backup disk writable for that user
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              image: {{ $pg.image }}
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.global.dbSecretName }}
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.global.dbSecretName }}
+                      key: password
+                - name: DATABASES
+                  value: {{ $dbs | quote }}
+                - name: KEEP
+                  value: {{ $pg.backup.retention | quote }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  STAMP=$(date -u +%Y%m%d-%H%M%S)
+                  DIR="/backups/$STAMP"
+                  mkdir -p "$DIR"
+                  for DB in $DATABASES; do
+                    echo "Backing up $DB ..."
+                    pg_dump -d "$DB" --format=custom --file="$DIR/$DB.dump"
+                  done
+                  echo "$STAMP" > /backups/LATEST
+                  echo "Backup $STAMP complete:"
+                  ls -lh "$DIR"
+                  # Retention: delete everything except the newest $KEEP backups
+                  ls -1d /backups/2*/ | sort -r | tail -n +$((KEEP + 1)) | xargs -r rm -rf
+                  echo "Backups kept:"
+                  ls -1d /backups/2*/
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: postgres-backups
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-restore
+  labels:
+    app: postgres-restore
+    {{- include "cloudforge.labels" . | nindent 4 }}
+spec:
+  # Suspended: this never runs on a schedule. It is a template for a manual restore Job.
+  schedule: "0 0 1 1 *"
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        metadata:
+          labels:
+            app: postgres-restore
+            {{- include "cloudforge.labels" . | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            runAsGroup: 70
+            fsGroup: 70
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: restore
+              image: {{ $pg.image }}
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: PGHOST
+                  value: postgres
+                - name: PGUSER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.global.dbSecretName }}
+                      key: username
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.global.dbSecretName }}
+                      key: password
+                - name: DATABASES
+                  value: {{ $dbs | quote }}
+                # Empty = restore the newest backup; or set a folder name such as 20261116-020000
+                - name: BACKUP_ID
+                  value: {{ $pg.backup.restoreBackupId | default "" | quote }}
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  ID="${BACKUP_ID:-$(cat /backups/LATEST)}"
+                  DIR="/backups/$ID"
+                  [ -d "$DIR" ] || { echo "Backup $DIR not found. Available:"; ls -1 /backups; exit 1; }
+                  echo "Restoring backup $ID ..."
+                  for DB in $DATABASES; do
+                    echo "  $DB"
+                    pg_restore -d "$DB" --clean --if-exists --no-owner "$DIR/$DB.dump"
+                  done
+                  echo "Restore of $ID complete."
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: postgres-backups
+{{- end }}

@@ -1,0 +1,89 @@
+{{- /* Alert rules. Only rendered when Prometheus Operator (kube-prometheus-stack) is installed. */}}
+{{- if and .Values.monitoring.enabled .Values.monitoring.alerts.enabled (.Capabilities.APIVersions.Has "monitoring.coreos.com/v1/PrometheusRule") }}
+{{- $ns := .Release.Namespace }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cloudforge-alerts
+  labels:
+    # kube-prometheus-stack only loads rules labelled with its release name
+    release: {{ .Values.monitoring.prometheusRelease }}
+    {{- include "cloudforge.labels" . | nindent 4 }}
+spec:
+  groups:
+    - name: cloudforge.availability
+      rules:
+        - alert: CloudForgeServiceUnavailable
+          expr: kube_deployment_status_replicas_available{namespace="{{ $ns }}"} < 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{`{{ $labels.deployment }}`}} has no running replicas"
+            description: "Deployment {{`{{ $labels.deployment }}`}} in namespace {{`{{ $labels.namespace }}`}} has had 0 available pods for more than 1 minute. Customers cannot use this part of VoltCart."
+
+        - alert: CloudForgePostgresDown
+          expr: kube_statefulset_status_replicas_ready{namespace="{{ $ns }}", statefulset="postgres"} < 1
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL is not ready"
+            description: "The postgres StatefulSet has had no ready pod for more than 1 minute. All services that store data are affected."
+
+        - alert: CloudForgeMetricsTargetDown
+          expr: up{namespace="{{ $ns }}"} == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Prometheus cannot scrape {{`{{ $labels.job }}`}}"
+            description: "Target {{`{{ $labels.instance }}`}} ({{`{{ $labels.job }}`}}) has been unreachable for 2 minutes. The pod may be hanging or its metrics endpoint is broken."
+
+        - alert: CloudForgePodCrashLooping
+          expr: increase(kube_pod_container_status_restarts_total{namespace="{{ $ns }}"}[10m]) > 2
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{`{{ $labels.pod }}`}} is restarting repeatedly"
+            description: "Container {{`{{ $labels.container }}`}} in pod {{`{{ $labels.pod }}`}} restarted more than 2 times in 10 minutes. Check: kubectl logs {{`{{ $labels.pod }}`}} -n {{`{{ $labels.namespace }}`}} --previous"
+
+    - name: cloudforge.performance
+      rules:
+        - alert: CloudForgeHighErrorRate
+          expr: |
+            sum by (application) (rate(http_server_requests_seconds_count{namespace="{{ $ns }}", status=~"5.."}[5m]))
+              /
+            sum by (application) (rate(http_server_requests_seconds_count{namespace="{{ $ns }}"}[5m]))
+              > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{`{{ $labels.application }}`}}: more than 5% of requests are failing"
+            description: "{{`{{ $labels.application }}`}} has returned 5xx errors for {{`{{ $value | humanizePercentage }}`}} of requests over the last 5 minutes."
+
+        - alert: CloudForgeHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (application, le) (rate(http_server_requests_seconds_bucket{namespace="{{ $ns }}", uri!~"/actuator.*"}[5m]))
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{`{{ $labels.application }}`}} is slow (p95 > 1s)"
+            description: "95% of requests to {{`{{ $labels.application }}`}} take up to {{`{{ $value | humanizeDuration }}`}} (threshold 1s) over the last 5 minutes."
+
+    - name: cloudforge.business
+      rules:
+        - alert: CloudForgeManyPaymentFailures
+          expr: sum(increase(voltcart_orders_total{namespace="{{ $ns }}", status="PAYMENT_FAILED"}[15m])) > 5
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Many VoltCart payments are failing"
+            description: "{{`{{ $value | humanize }}`}} orders failed payment in the last 15 minutes. Check payment-service."
+{{- end }}

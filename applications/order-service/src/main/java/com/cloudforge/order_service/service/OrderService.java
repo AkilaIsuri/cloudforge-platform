@@ -10,6 +10,8 @@ import com.cloudforge.order_service.entity.Order;
 import com.cloudforge.order_service.entity.OrderItem;
 import com.cloudforge.order_service.entity.OrderStatus;
 import com.cloudforge.order_service.repository.OrderRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -40,12 +42,26 @@ public class OrderService {
     private final ProductClient productClient;
     private final PaymentClient paymentClient;
 
+    // Business metrics, exposed on /actuator/prometheus as
+    //   voltcart_orders_total{status="PAID"|"PAYMENT_FAILED"}  and  voltcart_revenue_total
+    private final Counter paidOrders;
+    private final Counter failedOrders;
+    private final Counter revenue;
+
     public OrderService(OrderRepository orderRepository, UserClient userClient,
-                        ProductClient productClient, PaymentClient paymentClient) {
+                        ProductClient productClient, PaymentClient paymentClient,
+                        MeterRegistry meterRegistry) {
         this.orderRepository = orderRepository;
         this.userClient = userClient;
         this.productClient = productClient;
         this.paymentClient = paymentClient;
+        // Registered up front so the series exist (at 0) before the first order
+        this.paidOrders = Counter.builder("voltcart.orders").tag("status", OrderStatus.PAID.name())
+                .description("Orders placed, by final status").register(meterRegistry);
+        this.failedOrders = Counter.builder("voltcart.orders").tag("status", OrderStatus.PAYMENT_FAILED.name())
+                .description("Orders placed, by final status").register(meterRegistry);
+        this.revenue = Counter.builder("voltcart.revenue")
+                .description("Total value of paid orders in USD").register(meterRegistry);
     }
 
     public Order placeOrder(CreateOrderRequest request) {
@@ -74,7 +90,18 @@ public class OrderService {
             order.setFailureReason("Payment service unavailable");
             releaseItems(items);
         }
-        return orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        recordMetrics(saved);
+        return saved;
+    }
+
+    private void recordMetrics(Order order) {
+        if (order.getStatus() == OrderStatus.PAID) {
+            paidOrders.increment();
+            revenue.increment(order.getTotalAmount().doubleValue());
+        } else if (order.getStatus() == OrderStatus.PAYMENT_FAILED) {
+            failedOrders.increment();
+        }
     }
 
     public List<Order> getOrders(Long userId) {
