@@ -25,7 +25,7 @@ resource "aws_eks_node_group" "main" {
   node_role_arn   = var.node_role_arn
   subnet_ids      = var.node_subnet_ids
 
-  # t3.large: 2 vCPU, 8 GB RAM, up to 35 pods per node (t3.small allows only 11)
+  # m7i-flex.large by default: 2 vCPU, 8 GB RAM, up to 29 pods per node (t3.small allows only 11)
   instance_types = var.node_instance_types
   capacity_type  = "ON_DEMAND"
   disk_size      = 30

@@ -12,6 +12,7 @@ steps, so the same kind of issue can be solved faster next time.
 | 4 | [Grafana showed a scaled-down service as UP while its alert was firing](#4-grafana-showed-a-scaled-down-service-as-up-while-its-alert-was-firing) | Local Kubernetes | Monitoring / dashboards |
 | 5 | [SonarCloud: "Not authorized or organization not found"](#5-sonarcloud-not-authorized-or-organization-not-found) | CI (GitHub Actions) | Security scanning / SonarCloud |
 | 6 | [Unable to resolve action `aquasecurity/trivy-action@0.28.0`](#6-unable-to-resolve-action-aquasecuritytrivy-action0280) | CI (GitHub Actions) | Workflow dependencies |
+| 7 | [EKS node group `CREATE_FAILED`: instance type not eligible for Free Tier](#7-eks-node-group-create_failed-instance-type-not-eligible-for-free-tier) | AWS / Terraform | EC2 / EKS node group |
 
 ---
 
@@ -231,8 +232,12 @@ organization is imported from GitHub its key is lowercased, and the project key 
 ruled out.)
 
 ### Solution
-Set the real keys in `.github/workflows/ci-cd.yml` (they can also be overridden with the GitHub
-Actions variables `SONAR_ORGANIZATION` / `SONAR_PROJECT_KEY`).
+Set the real keys in `.github/workflows/ci-cd.yml`. The first fix still failed with the same error,
+because **GitHub Actions repository variables** `SONAR_ORGANIZATION` / `SONAR_PROJECT_KEY` had been
+created with the display names. The workflow uses `${{ vars.SONAR_ORGANIZATION || 'akilaisuri' }}`,
+so a variable, when present, **overrides** the default in the file. Correcting the variables
+(Settings → Secrets and variables → Actions → Variables) and re-running the job fixed it – the log
+line `+ sonar-scanner -Dsonar.organization=…` showed which value was really used.
 
 ### How it was diagnosed
 SonarCloud's public API shows which keys exist (no login needed for public projects):
@@ -274,6 +279,47 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 **Lesson:** pinned versions can disappear. Check action tags on GitHub when pinning. For stronger
 supply-chain security, pin third-party actions to a full **commit SHA** (immutable) and let
 Dependabot propose updates.
+
+---
+
+## 7. EKS node group `CREATE_FAILED`: instance type not eligible for Free Tier
+
+**Stage:** AWS – first `terraform apply` (VPC, ECR, IAM and the EKS control plane were created; the
+node group failed after ~15 minutes)
+
+### Problem
+```
+Error: waiting for EKS Node Group (cloudforge-eks:cloudforge-eks-nodes) create: unexpected state
+'CREATE_FAILED', wanted target 'ACTIVE'. last error: ... AsgInstanceLaunchFailures: Could not launch
+On-Demand Instances. InvalidParameterCombination - The specified instance type is not eligible for
+Free Tier.
+```
+
+### Root cause
+The AWS account is on the **Free Tier plan**, which only allows launching *free-tier-eligible* EC2
+instance types. The node group requested `t3.large`, which is not eligible, so its Auto Scaling
+group could not start any instance and EKS marked the node group `CREATE_FAILED`.
+`terraform plan` cannot detect this – the request is valid; only the account's plan rejects it.
+
+### Solution
+Changed the default node type in `terraform/variables.tf` to **`m7i-flex.large`** – free-tier
+eligible, same size as `t3.large` (2 vCPU, 8 GB), x86 (runs the amd64 images CI builds), up to 29
+pods per node. Re-ran `terraform plan` / `terraform apply`: Terraform had marked the failed node group
+as *tainted*, so it replaced only that resource and created the remaining add-ons.
+
+### How it was diagnosed
+```bash
+# Which instance types may this account launch?
+aws ec2 describe-instance-types --region us-east-1 \
+  --filters Name=free-tier-eligible,Values=true \
+  --query 'InstanceTypes[].[InstanceType,VCpuInfo.DefaultVCpus,MemoryInfo.SizeInMiB]' --output text
+```
+Max pods per node on EKS (AWS VPC CNI) = `ENIs × (IPs per ENI − 1) + 2` → m7i-flex.large:
+`3 × (10 − 1) + 2 = 29`.
+
+**Lesson:** the error said exactly what was wrong – read the *last error* at the end of a long
+Terraform message. Account-level restrictions (Free Tier plan, service quotas, SCPs) only show up at
+apply time, so check them before choosing instance sizes.
 
 ---
 

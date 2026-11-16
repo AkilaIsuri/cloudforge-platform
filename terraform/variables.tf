@@ -83,7 +83,10 @@ variable "ecr_repository_names" {
 variable "node_instance_types" {
   description = "EC2 instance types for the worker nodes"
   type        = list(string)
-  default     = ["t3.large"]
+  # m7i-flex.large: 2 vCPU, 8 GB RAM, up to 29 pods per node, x86 (amd64 images).
+  # Chosen because AWS Free Tier plan accounts can only launch free-tier-eligible types
+  # (t3.large fails with "not eligible for Free Tier" – see docs/Issues.md #7).
+  default = ["m7i-flex.large"]
 }
 
 variable "node_desired_size" {
