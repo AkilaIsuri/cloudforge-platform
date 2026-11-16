@@ -1,0 +1,57 @@
+# Infrastructure-as-code security scanning
+#   Checkov → Terraform (AWS misconfigurations) and the rendered Helm chart (Kubernetes misconfigurations)
+#   Trivy   → config scan of Terraform, Helm and Dockerfiles
+# Report-only (soft fail): findings are listed in the job log and triaged in docs/security.md.
+name: IaC security scan
+
+on:
+  push:
+    branches: [main]
+    paths: ["terraform/**", "helm/**", "applications/**/Dockerfile", ".github/workflows/iac-security.yml"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checkov:
+    name: Checkov (Terraform + Kubernetes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: azure/setup-helm@v4
+
+      - name: Install Checkov
+        run: pip install --quiet checkov
+
+      - name: Scan Terraform
+        run: checkov -d terraform --framework terraform --compact --soft-fail
+
+      - name: Render the Helm chart for EKS
+        run: |
+          helm template cloudforge helm/cloudforge -n cloudforge \
+            -f helm/cloudforge/values-eks.yaml > rendered-eks.yaml
+
+      - name: Scan Kubernetes manifests
+        run: checkov -f rendered-eks.yaml --framework kubernetes --compact --soft-fail
+
+  trivy-config:
+    name: Trivy config scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan Terraform, Helm and Dockerfiles
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "0"

@@ -82,6 +82,12 @@ frontend:
       cpu: 250m
       memory: 128Mi
 
+# StorageClass created by this chart (EKS: encrypted gp3 via the EBS CSI driver).
+# Off by default – local clusters already have a default StorageClass.
+storageClass:
+  create: false
+  name: gp3
+
 postgres:
   image: postgres:16-alpine
   databases:

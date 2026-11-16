@@ -1,13 +1,21 @@
-# Amazon EKS. Not used yet – it is wired into CI and Argo CD in a later step.
-# CI will write the built commit SHA into global.imageTag.
+# Amazon EKS – used by Argo CD (argocd/cloudforge-app.yaml).
+# CI writes the built commit SHA into global.imageTag on every push to main.
 
 global:
-  imageRepositoryPrefix: 761558631184.dkr.ecr.us-east-1.amazonaws.com
+  # ECR registry of the CloudForge AWS account (terraform output ecr_registry)
+  imageRepositoryPrefix: 125610095979.dkr.ecr.us-east-1.amazonaws.com
   imageTag: "CHANGE_ME_BY_CI"
   imagePullPolicy: IfNotPresent
 
 springDefaults:
   replicas: 2
+
+services:
+  api-gateway:
+    env:
+      # Set to the VoltCart load balancer URL once it exists, e.g.
+      # "http://a1b2c3-123456.us-east-1.elb.amazonaws.com" (see docs/Issues.md #2)
+      CORS_ALLOWED_ORIGINS: "http://localhost:8088"
 
 frontend:
   replicas: 2
@@ -15,7 +23,11 @@ frontend:
     type: LoadBalancer
     port: 80
 
+# Encrypted gp3 disks via the EBS CSI driver (installed by Terraform)
+storageClass:
+  create: true
+  name: gp3
+
 postgres:
   storage: 10Gi
-  # Needs the EBS CSI driver add-on in the cluster (added in the Terraform step)
-  storageClassName: gp2
+  storageClassName: gp3

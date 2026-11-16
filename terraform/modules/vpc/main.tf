@@ -1,6 +1,10 @@
 resource "aws_vpc" "main" {
   cidr_block = var.vpc_cidr
 
+  # Required by EKS: nodes and endpoints need DNS names inside the VPC
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
   tags = {
     Name = "cloudforge-vpc"
   }
