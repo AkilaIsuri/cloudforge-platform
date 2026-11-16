@@ -98,8 +98,8 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         with:
           args: >
-            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION || 'AkilaIsuri' }}
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || 'cloudforge-platform' }}
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION || 'akilaisuri' }}
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || 'AkilaIsuri_cloudforge-platform' }}
             -Dsonar.projectName=CloudForge
             -Dsonar.sources=applications
             -Dsonar.exclusions=**/src/test/**,**/node_modules/**,**/dist/**,**/public/images/**

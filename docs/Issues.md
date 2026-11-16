@@ -10,6 +10,7 @@ steps, so the same kind of issue can be solved faster next time.
 | 2 | [403 Forbidden when registering a user on Kubernetes](#2-403-forbidden-when-registering-a-user-on-kubernetes) | Local Kubernetes | API gateway / CORS |
 | 3 | [order-service unit tests failed (`mvn test`)](#3-order-service-unit-tests-failed-mvn-test) | Build / tests | Spring test config / Mockito |
 | 4 | [Grafana showed a scaled-down service as UP while its alert was firing](#4-grafana-showed-a-scaled-down-service-as-up-while-its-alert-was-firing) | Local Kubernetes | Monitoring / dashboards |
+| 5 | [SonarCloud: "Not authorized or organization not found"](#5-sonarcloud-not-authorized-or-organization-not-found) | CI (GitHub Actions) | Security scanning / SonarCloud |
 
 ---
 
@@ -203,6 +204,44 @@ kube_deployment_status_replicas_available{namespace="cloudforge", deployment="pr
 **Lesson:** "the series disappeared" and "the value is 0" are different things in Prometheus. For
 "is it running?" use the orchestrator's view (kube-state-metrics) or `absent()`, not only `up`. Keep
 dashboards and alerts on the **same signal** so they never disagree.
+
+---
+
+## 5. SonarCloud: "Not authorized or organization not found"
+
+**Stage:** CI – first pull request run (`SonarCloud analysis` job)
+
+### Problem
+The SonarCloud job failed after 5 seconds:
+```
+ERROR Fail to load the list of plugins installed on the server: Not authorized or organization not found
+Error: Process completed with exit code 3.
+```
+
+### Root cause
+The workflow used `-Dsonar.organization=AkilaIsuri` and `-Dsonar.projectKey=cloudforge-platform`.
+Those were the **display names**, not the **keys**. SonarCloud keys are case-sensitive; when an
+organization is imported from GitHub its key is lowercased, and the project key is
+`<GitHubOwner>_<repository>`:
+- organization key: `akilaisuri`
+- project key: `AkilaIsuri_cloudforge-platform`
+
+(The same error also appears when the `SONAR_TOKEN` secret is missing or invalid, so both had to be
+ruled out.)
+
+### Solution
+Set the real keys in `.github/workflows/ci-cd.yml` (they can also be overridden with the GitHub
+Actions variables `SONAR_ORGANIZATION` / `SONAR_PROJECT_KEY`).
+
+### How it was diagnosed
+SonarCloud's public API shows which keys exist (no login needed for public projects):
+```bash
+curl -s "https://sonarcloud.io/api/organizations/search?organizations=akilaisuri"      # found
+curl -s "https://sonarcloud.io/api/organizations/search?organizations=AkilaIsuri"      # not found
+curl -s "https://sonarcloud.io/api/components/show?component=AkilaIsuri_cloudforge-platform"  # found
+```
+**Lesson:** use the *key* fields from SonarCloud's **Information** page, not the names shown in the
+UI. When an error says "A or B", rule out each cause separately.
 
 ---
 
