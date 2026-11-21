@@ -13,6 +13,7 @@ steps, so the same kind of issue can be solved faster next time.
 | 5 | [SonarCloud: "Not authorized or organization not found"](#5-sonarcloud-not-authorized-or-organization-not-found) | CI (GitHub Actions) | Security scanning / SonarCloud |
 | 6 | [Unable to resolve action `aquasecurity/trivy-action@0.28.0`](#6-unable-to-resolve-action-aquasecuritytrivy-action0280) | CI (GitHub Actions) | Workflow dependencies |
 | 7 | [EKS node group `CREATE_FAILED`: instance type not eligible for Free Tier](#7-eks-node-group-create_failed-instance-type-not-eligible-for-free-tier) | AWS / Terraform | EC2 / EKS node group |
+| 8 | [Trivy blocked the release: 9 CRITICAL CVEs in the Spring Boot images](#8-trivy-blocked-the-release-9-critical-cves-in-the-spring-boot-images) | CI – security gate | Dependencies / vulnerability management |
 
 ---
 
@@ -320,6 +321,56 @@ Max pods per node on EKS (AWS VPC CNI) = `ENIs × (IPs per ENI − 1) + 2` → m
 **Lesson:** the error said exactly what was wrong – read the *last error* at the end of a long
 Terraform message. Account-level restrictions (Free Tier plan, service quotas, SCPs) only show up at
 apply time, so check them before choosing instance sizes.
+
+---
+
+## 8. Trivy blocked the release: 9 CRITICAL CVEs in the Spring Boot images
+
+**Stage:** CI – first run on `main` after merging PR #1 (`Image <service>` jobs, Trivy step)
+
+### Problem
+The security gate (Trivy, `severity: CRITICAL`, `ignore-unfixed: true`, `exit-code: 1`) failed the
+image jobs of the four Tomcat-based services, so no image was pushed to ECR:
+```
+Java (jar)  Total: 9 (CRITICAL: 9)
+org.apache.tomcat.embed:tomcat-embed-core 10.1.43  – 7 CVEs, fixed in 10.1.55 … 10.1.58
+org.springframework:spring-webmvc 6.2.9            – CVE-2026-47884, CVE-2026-47890, fixed in 7.0.9
+```
+This is the gate **working as intended**: vulnerable images never reached the registry.
+
+### Root cause
+The services were built on Spring Boot **3.5.4**, which bundles Tomcat 10.1.43 and Spring
+Framework 6.2.9. Vulnerabilities published since then have fixes in newer patch releases – except two
+Spring Framework CVEs that are only fixed in the 7.0 line (Spring Boot 4).
+
+### Solution
+1. **Patched dependencies** (all 5 services):
+   - Spring Boot `3.5.4` → `3.5.16` (latest 3.5.x), Spring Cloud `2025.0.0` → `2025.0.3` (gateway)
+   - Embedded Tomcat pinned to `10.1.62` via `<tomcat.version>` (user, product, order, payment)
+   - Frontend base image `nginxinc/nginx-unprivileged:1.27-alpine` → `1.30.6-alpine`
+2. **Documented risk acceptance** (decision of the project owner) for the two Spring Framework CVEs
+   that have no 6.2.x fix, in `.trivyignore`, referenced explicitly in `ci-cd.yml`:
+
+   | CVE | Issue | Why not exploitable in VoltCart | Expires |
+   |---|---|---|---|
+   | CVE-2026-47884 | RCE via `XsltView` path handling | No XSLT views are used | 2027-02-28 |
+   | CVE-2026-47890 | Stream corruption in Server-Sent Events with views | No SSE; all endpoints return JSON from `@RestController` | 2027-02-28 |
+
+   The expiry date makes Trivy report them again, forcing a re-review. The gate stays active for
+   every other CRITICAL vulnerability. **Follow-up:** upgrade to Spring Boot 4 / Spring Framework 7.
+
+### How it was diagnosed
+```bash
+# Read the Trivy table in the failed job: library, installed version, fixed version
+# Find the newest available versions on Maven Central
+curl -s https://repo1.maven.org/maven2/org/springframework/boot/spring-boot-starter-parent/maven-metadata.xml
+curl -s https://repo1.maven.org/maven2/org/apache/tomcat/embed/tomcat-embed-core/maven-metadata.xml
+curl -s https://repo1.maven.org/maven2/org/springframework/spring-webmvc/maven-metadata.xml
+```
+**Lesson:** a scanner in the pipeline only helps if it can *stop* a release. When it does: patch what
+has a fix; for what does not, decide explicitly – fix by a major upgrade, or accept the risk with a
+written reason, evidence that the vulnerable code path is unused, and an expiry date. Never just turn
+the gate off.
 
 ---
 

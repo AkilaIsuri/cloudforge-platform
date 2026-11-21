@@ -140,6 +140,9 @@ jobs:
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
+          # Risk acceptances approved by the project owner (reason + expiry per CVE).
+          # See .trivyignore and docs/Issues.md #8.
+          trivyignores: .trivyignore
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4

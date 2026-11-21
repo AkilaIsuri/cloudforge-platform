@@ -7,7 +7,7 @@ COPY . .
 RUN npm run build
 
 # ---- Runtime stage: non-root nginx listening on 8080 ----
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.30.6-alpine
 ENV API_GATEWAY_URL=http://api-gateway:8080
 COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
