@@ -1,13 +1,20 @@
-# Dependabot opens pull requests when newer versions are available.
-# Keeps the SHA-pinned GitHub Actions, base images and libraries patched; every update goes through
-# the normal PR checks (tests, SonarCloud, Trivy) before it can be merged.
+# Dependabot: monthly PRs for patch/minor updates, grouped per ecosystem.
+# Major versions (e.g. Spring Boot 4, Java 25+, React plugin 6) are planned upgrades, not automatic PRs,
+# so they are ignored here (see docs/security.md "Known gaps and future work").
+# Every update still goes through the normal PR checks (tests, SonarCloud, Trivy) before merging.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directories:
@@ -18,8 +25,15 @@ updates:
       - /applications/api-gateway
       - /applications/frontend
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      base-images:
+        patterns: ["*"]
+    ignore:
+      # Java 21 is the LTS version the services are compiled for – no automatic jump to 22+
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: maven
     directories:
@@ -29,11 +43,25 @@ updates:
       - /applications/payment-service
       - /applications/api-gateway
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      maven-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /applications/frontend
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 3
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      npm-minor-and-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
