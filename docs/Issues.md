@@ -14,6 +14,8 @@ steps, so the same kind of issue can be solved faster next time.
 | 6 | [Unable to resolve action `aquasecurity/trivy-action@0.28.0`](#6-unable-to-resolve-action-aquasecuritytrivy-action0280) | CI (GitHub Actions) | Workflow dependencies |
 | 7 | [EKS node group `CREATE_FAILED`: instance type not eligible for Free Tier](#7-eks-node-group-create_failed-instance-type-not-eligible-for-free-tier) | AWS / Terraform | EC2 / EKS node group |
 | 8 | [Trivy blocked the release: 9 CRITICAL CVEs in the Spring Boot images](#8-trivy-blocked-the-release-9-critical-cves-in-the-spring-boot-images) | CI – security gate | Dependencies / vulnerability management |
+| 9 | [Trivy blocked the api-gateway image: Netty, Bouncy Castle, WebFlux CVEs](#9-trivy-blocked-the-api-gateway-image-netty-bouncy-castle-webflux-cves) | CI – security gate | Dependencies / vulnerability management |
+| 10 | [Trivy blocked the frontend image: nginx and brotli in the base image](#10-trivy-blocked-the-frontend-image-nginx-and-brotli-in-the-base-image) | CI – security gate | Base images / OS packages |
 
 ---
 
@@ -371,6 +373,88 @@ curl -s https://repo1.maven.org/maven2/org/springframework/spring-webmvc/maven-m
 has a fix; for what does not, decide explicitly – fix by a major upgrade, or accept the risk with a
 written reason, evidence that the vulnerable code path is unused, and an expiry date. Never just turn
 the gate off.
+
+---
+
+## 9. Trivy blocked the api-gateway image: Netty, Bouncy Castle, WebFlux CVEs
+
+**Stage:** CI – run on `main` after merging PR #2 (`Image api-gateway` job, after the fixes from #8).
+
+### Problem
+```
+Java (jar)  Total: 3 (CRITICAL: 3)
+io.netty:netty-handler 4.1.135.Final          CVE-2026-75595  fixed in 4.1.137.Final
+org.bouncycastle:bcprov-jdk18on 1.80.2         CVE-2026-8763   fixed in 1.85
+org.springframework:spring-webflux 6.2.19      CVE-2026-47892  fixed in 7.0.9
+```
+
+### Root cause
+The gateway is reactive (Spring Cloud Gateway on WebFlux/Netty), so it ships a different set of
+libraries from the Tomcat-based services. Spring Boot 3.5.16 still manages Netty 4.1.135, and
+Bouncy Castle arrives transitively through Spring Cloud. As in #8, the Spring Framework CVE is only
+fixed in the 7.0 line.
+
+### Solution
+- `api-gateway/pom.xml`: `<netty.version>4.1.141.Final</netty.version>` (Spring Boot's managed
+  Netty version) and a `dependencyManagement` override forcing Bouncy Castle `bcprov` / `bcpkix` /
+  `bcutil` to **1.87**.
+- **Risk acceptance (decision of the project owner, 2026-11-21)** for **CVE-2026-47892** in
+  `.trivyignore`, expiry 2027-02-28: the bypass affects WebFlux *functional endpoints*
+  (`RouterFunction` + `RequestPredicates`). The gateway defines none – a code search for
+  `RouterFunction|RequestPredicates|HandlerFunction` returns nothing; routes are configured with
+  Spring Cloud Gateway's `RouteLocator`. Follow-up: Spring Boot 4.
+
+### How it was diagnosed
+```bash
+# Fixed versions available?
+curl -s https://repo1.maven.org/maven2/io/netty/netty-handler/maven-metadata.xml
+curl -s https://repo1.maven.org/maven2/org/bouncycastle/bcprov-jdk18on/maven-metadata.xml
+# Is the vulnerable feature used?
+grep -rnE 'RouterFunction|RequestPredicates|HandlerFunction' applications/api-gateway/src
+```
+**Lesson:** each image has its own dependency tree – scan and patch every image, not just one
+representative. Transitive dependencies (Bouncy Castle here) can be forced to a safe version with
+`dependencyManagement` without touching the library that pulls them in.
+
+---
+
+## 10. Trivy blocked the frontend image: nginx and brotli in the base image
+
+**Stage:** CI – same run as #9 (`Image frontend` job)
+
+### Problem
+```
+frontend:<sha> (alpine 3.24.2)   Total: 5 (CRITICAL: 5)
+brotli-libs 1.2.0-r1   CVE-2026-111497                                         fixed in 1.2.1-r0
+nginx 1.30.6-r1        CVE-2026-113425 (mail proxy), CVE-2026-121810 (HTTP/3),
+                       CVE-2026-123007, CVE-2026-123633 (HTTP/2)              fixed in 1.30.7-r0
+```
+
+### Root cause
+The vulnerabilities are in **OS packages of the base image** (`nginxinc/nginx-unprivileged:1.30.6-alpine`),
+not in our code. Alpine already ships the fixes, but the newest published base image (built
+2026-10-19) still contains the old packages.
+
+### Solution
+- **brotli-libs:** patched in our Dockerfile with `apk upgrade --no-cache brotli-libs` (as root, then
+  back to the non-root user `101`). Only this library is upgraded – running `apk upgrade nginx` would
+  replace the nginx.org build with Alpine's own nginx package (different config layout and user).
+- **nginx (4 CVEs): risk acceptance with a short expiry (2026-12-31)**, decision of the project owner.
+  All four need HTTP/2, HTTP/3/QUIC or the mail module. VoltCart's nginx only has
+  `listen 8080; listen [::]:8080;` – plain HTTP/1.1, no `ssl`, `http2`, `quic` or `mail`
+  (TLS / HTTP/2 to the internet terminate at the AWS load balancer). Follow-up: bump the base image to
+  `1.30.7-alpine` as soon as it is published, then remove the entries.
+
+### How it was diagnosed
+```bash
+# Is a newer base image published?
+curl -s "https://hub.docker.com/v2/repositories/nginxinc/nginx-unprivileged/tags?page_size=100&ordering=last_updated"
+# Are the vulnerable features enabled?
+grep -niE 'http2|http3|quic|mail|ssl' applications/frontend/nginx/*     # → none
+```
+**Lesson:** base-image CVEs often have fixes in the distribution before the image is rebuilt. Patch
+what is safe to patch, accept the rest only with evidence and a *short* expiry, and track the
+upstream release.
 
 ---
 
