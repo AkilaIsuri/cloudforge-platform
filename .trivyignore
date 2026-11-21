@@ -1,0 +1,14 @@
+# Trivy risk acceptances – each entry needs a reason and an expiry date (exp:YYYY-MM-DD).
+# After the expiry date Trivy reports the CVE again, forcing a re-review.
+# See docs/Issues.md #8.
+
+# Spring Framework 6.2.x (spring-webmvc): no fixed 6.2.x release; fix only in 7.0.x (Spring Boot 4).
+# Not exploitable here: VoltCart does not use XsltView or any XSLT view rendering.
+# Plan: upgrade to Spring Boot 4 / Spring Framework 7.
+CVE-2026-47884 exp:2027-02-28
+
+# Spring Framework 6.2.x (spring-webmvc / spring-webflux): no fixed 6.2.x release; fix only in 7.0.x.
+# Not exploitable here: VoltCart does not use Server-Sent Events with view rendering
+# (all endpoints return JSON from @RestController).
+# Plan: upgrade to Spring Boot 4 / Spring Framework 7.
+CVE-2026-47890 exp:2027-02-28
