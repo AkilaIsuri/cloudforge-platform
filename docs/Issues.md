@@ -16,6 +16,7 @@ steps, so the same kind of issue can be solved faster next time.
 | 8 | [Trivy blocked the release: 9 CRITICAL CVEs in the Spring Boot images](#8-trivy-blocked-the-release-9-critical-cves-in-the-spring-boot-images) | CI – security gate | Dependencies / vulnerability management |
 | 9 | [Trivy blocked the api-gateway image: Netty, Bouncy Castle, WebFlux CVEs](#9-trivy-blocked-the-api-gateway-image-netty-bouncy-castle-webflux-cves) | CI – security gate | Dependencies / vulnerability management |
 | 10 | [Trivy blocked the frontend image: nginx and brotli in the base image](#10-trivy-blocked-the-frontend-image-nginx-and-brotli-in-the-base-image) | CI – security gate | Base images / OS packages |
+| 11 | [Alert "not working" on EKS – the browser showed the local cluster's Prometheus](#11-alert-not-working-on-eks--the-browser-showed-the-local-clusters-prometheus) | EKS | kubectl contexts / port-forward |
 
 ---
 
@@ -455,6 +456,39 @@ grep -niE 'http2|http3|quic|mail|ssl' applications/frontend/nginx/*     # → no
 **Lesson:** base-image CVEs often have fixes in the distribution before the image is rebuilt. Patch
 what is safe to patch, accept the rest only with evidence and a *short* expiry, and track the
 upstream release.
+
+---
+
+## 11. Alert "not working" on EKS – the browser showed the local cluster's Prometheus
+
+**Stage:** EKS – alert demo (`CloudForgeManyPaymentFailures` after several declined payments)
+
+### Problem
+Grafana showed the failed payments, but Prometheus → Alerts listed `CloudForgeManyPaymentFailures`
+as *inactive*, and the query `voltcart_orders_total` returned **no data**.
+
+### Root cause
+Two clusters were in use (local Docker Desktop and EKS). An **old `kubectl port-forward` to the
+local cluster's Prometheus** (started days earlier) was still running and holding port 9090. The new
+port-forward to EKS could not bind the same port, so http://localhost:9090 kept showing the *local*
+Prometheus – where no VoltCart orders had been placed, so the alert was correctly inactive. Grafana's
+port-forward (3001) had been started later, against EKS, which is why the two disagreed.
+
+### Solution
+Stopped the old tunnel (`kill <pid>` / Ctrl+C) and started the port-forward again with the EKS context
+active. The alert rule itself was fine (`health=ok`).
+
+### How it was diagnosed
+```bash
+# Which cluster is this Prometheus scraping? (EKS nodes are ip-10-0-…, local is desktop-control-plane)
+curl -s --data-urlencode 'query=kube_node_info' http://localhost:9090/api/v1/query
+# Which port-forwards are running?
+ps -eo pid,args | grep "kubectl.*port-forward"
+kubectl config current-context
+```
+**Lesson:** a port-forward is bound to the cluster that was active when it *started* and keeps running
+after you switch contexts. With several clusters, check the context before every command, stop old
+tunnels, and verify *which* cluster a UI shows (a node name is a quick tell).
 
 ---
 

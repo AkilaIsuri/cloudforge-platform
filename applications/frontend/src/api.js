@@ -21,6 +21,16 @@ async function request(path, options = {}) {
   return response.status === 204 ? null : response.json();
 }
 
+// IDs come from browser storage, which a user can edit. Only a positive whole number may ever be
+// placed into a request URL, so the value can't change which endpoint or host is called.
+function toId(value) {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new Error('Invalid id');
+  }
+  return id;
+}
+
 export const api = {
   getProducts: () => request('/products'),
 
@@ -28,7 +38,8 @@ export const api = {
   createUser: (user) => request('/users', { method: 'POST', body: JSON.stringify(user) }),
 
   placeOrder: (order) => request('/orders', { method: 'POST', body: JSON.stringify(order) }),
-  getOrders: (userId) => request(`/orders?userId=${encodeURIComponent(userId)}`),
+  getOrders: (userId) =>
+    request(`/orders?${new URLSearchParams({ userId: String(toId(userId)) })}`),
 };
 
 export const money = (value) =>

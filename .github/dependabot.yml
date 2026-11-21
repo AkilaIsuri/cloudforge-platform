@@ -1,0 +1,39 @@
+# Dependabot opens pull requests when newer versions are available.
+# Keeps the SHA-pinned GitHub Actions, base images and libraries patched; every update goes through
+# the normal PR checks (tests, SonarCloud, Trivy) before it can be merged.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directories:
+      - /applications/user-service
+      - /applications/product-service
+      - /applications/order-service
+      - /applications/payment-service
+      - /applications/api-gateway
+      - /applications/frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: maven
+    directories:
+      - /applications/user-service
+      - /applications/product-service
+      - /applications/order-service
+      - /applications/payment-service
+      - /applications/api-gateway
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /applications/frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3

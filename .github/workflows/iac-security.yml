@@ -2,6 +2,7 @@
 #   Checkov → Terraform (AWS misconfigurations) and the rendered Helm chart (Kubernetes misconfigurations)
 #   Trivy   → config scan of Terraform, Helm and Dockerfiles
 # Report-only (soft fail): findings are listed in the job log and triaged in docs/security.md.
+# Third-party actions and images are pinned to immutable commit SHAs / image digests (supply chain).
 name: IaC security scan
 
 on:
@@ -15,41 +16,42 @@ on:
 permissions:
   contents: read
 
+env:
+  # Checkov runs from a version- and digest-pinned image instead of an unpinned `pip install`
+  CHECKOV_IMAGE: bridgecrew/checkov:3.4.5@sha256:122602cf32cc72286155d39f1f234b7b594818f7b8d7fdf490701620e521368b
+
 jobs:
   checkov:
     name: Checkov (Terraform + Kubernetes)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - uses: azure/setup-helm@v4
-
-      - name: Install Checkov
-        run: pip install --quiet checkov
-
-      - name: Scan Terraform
-        run: checkov -d terraform --framework terraform --compact --soft-fail
+      - uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
 
       - name: Render the Helm chart for EKS
         run: |
           helm template cloudforge helm/cloudforge -n cloudforge \
             -f helm/cloudforge/values-eks.yaml > rendered-eks.yaml
 
+      - name: Scan Terraform
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo "$CHECKOV_IMAGE" \
+            -d terraform --framework terraform --compact --soft-fail
+
       - name: Scan Kubernetes manifests
-        run: checkov -f rendered-eks.yaml --framework kubernetes --compact --soft-fail
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo "$CHECKOV_IMAGE" \
+            -f rendered-eks.yaml --framework kubernetes --compact --soft-fail
 
   trivy-config:
     name: Trivy config scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Scan Terraform, Helm and Dockerfiles
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           scan-ref: .
