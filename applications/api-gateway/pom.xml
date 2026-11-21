@@ -20,7 +20,7 @@
     <properties>
         <java.version>21</java.version>
         <!-- Spring Cloud release train that matches Spring Boot 3.5 -->
-        <spring-cloud.version>2025.0.3</spring-cloud.version>
+        <spring-cloud.version>2025.1.4</spring-cloud.version>
         <!-- Patched versions (Trivy: CRITICAL CVEs) – docs/Issues.md #9 -->
         <netty.version>4.1.141.Final</netty.version>
         <bouncycastle.version>1.87</bouncycastle.version>
