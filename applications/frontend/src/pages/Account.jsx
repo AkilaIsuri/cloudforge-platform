@@ -38,9 +38,10 @@ export default function Account({ user, onUser, onNavigate }) {
     }
   };
 
+  // run() catches and displays its own errors, so the returned promise is deliberately not awaited
   const signIn = (event) => {
     event.preventDefault();
-    run(async () => {
+    void run(async () => {
       const users = await api.getUsers();
       const match = users.find((u) => u.email?.toLowerCase() === email.trim().toLowerCase());
       if (!match) throw new Error('No account with that email yet. Create one instead.');
@@ -51,7 +52,7 @@ export default function Account({ user, onUser, onNavigate }) {
 
   const register = (event) => {
     event.preventDefault();
-    run(async () => {
+    void run(async () => {
       const users = await api.getUsers();
       if (users.some((u) => u.email?.toLowerCase() === form.email.trim().toLowerCase())) {
         throw new Error('That email is already registered. Sign in instead.');
@@ -76,11 +77,11 @@ export default function Account({ user, onUser, onNavigate }) {
       </p>
 
       <div className="tabs" role="tablist">
-        <button role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'tab active' : 'tab'}
+        <button type="button" role="tab" aria-selected={mode === 'signin'} className={mode === 'signin' ? 'tab active' : 'tab'}
           onClick={() => { setMode('signin'); setError(''); }}>
           Sign in
         </button>
-        <button role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'tab active' : 'tab'}
+        <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'tab active' : 'tab'}
           onClick={() => { setMode('register'); setError(''); }}>
           Create account
         </button>
@@ -94,7 +95,7 @@ export default function Account({ user, onUser, onNavigate }) {
             Email
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
           </label>
-          <button className="btn primary block" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+          <button type="submit" className="btn primary block" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
         </form>
       ) : (
         <form className="form" onSubmit={register}>
@@ -103,7 +104,7 @@ export default function Account({ user, onUser, onNavigate }) {
             <label>Last name<input {...field('lastName')} /></label>
           </div>
           <label>Email<input type="email" placeholder="you@example.com" {...field('email')} /></label>
-          <button className="btn primary block" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
+          <button type="submit" className="btn primary block" disabled={busy}>{busy ? 'Creating…' : 'Create account'}</button>
         </form>
       )}
 

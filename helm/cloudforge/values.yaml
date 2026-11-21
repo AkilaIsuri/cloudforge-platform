@@ -18,13 +18,17 @@ global:
 # Defaults applied to every Spring Boot service unless the service overrides them
 springDefaults:
   replicas: 1
+  # ephemeral-storage = the node's local disk used by the container (logs, /tmp emptyDir).
+  # The limit stops one pod from filling the node's disk.
   resources:
     requests:
       cpu: 100m
       memory: 384Mi
+      ephemeral-storage: 64Mi
     limits:
       cpu: 1000m
       memory: 768Mi
+      ephemeral-storage: 512Mi
 
 # Spring Boot services. Each gets a Deployment + ClusterIP Service on port 8080.
 # "database" wires SPRING_DATASOURCE_* to that Postgres database.
@@ -78,9 +82,11 @@ frontend:
     requests:
       cpu: 20m
       memory: 32Mi
+      ephemeral-storage: 32Mi
     limits:
       cpu: 250m
       memory: 128Mi
+      ephemeral-storage: 256Mi
 
 # StorageClass created by this chart (EKS: encrypted gp3 via the EBS CSI driver).
 # Off by default – local clusters already have a default StorageClass.
@@ -98,13 +104,16 @@ postgres:
   storage: 1Gi
   # Empty = the cluster's default StorageClass (hostpath on Docker Desktop, gp2/gp3 on EKS)
   storageClassName: ""
+  # Database files live on the PersistentVolume; ephemeral storage only covers logs and temp files
   resources:
     requests:
       cpu: 100m
       memory: 256Mi
+      ephemeral-storage: 64Mi
     limits:
       cpu: 500m
       memory: 512Mi
+      ephemeral-storage: 512Mi
   # Backup & recovery: pg_dump of every database to a separate disk
   backup:
     enabled: true
