@@ -8,7 +8,7 @@ COPY . .
 RUN npm run build
 
 # ---- Runtime stage: non-root nginx listening on 8080 ----
-FROM nginxinc/nginx-unprivileged:1.30.6-alpine
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine
 # Patch an OS library that is fixed in Alpine but not yet in the base image (Trivy) – docs/Issues.md #10.
 # Only this library: upgrading nginx itself via apk would replace the nginx.org build with Alpine's.
 USER root
