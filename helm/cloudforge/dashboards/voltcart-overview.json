@@ -1,0 +1,227 @@
+{
+  "title": "VoltCart – Service Overview",
+  "uid": "voltcart-overview",
+  "description": "Health, traffic, errors, latency and business metrics for the VoltCart services on CloudForge.",
+  "tags": ["cloudforge", "voltcart"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "hide": 0,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Service status",
+      "description": "Available pods per component right now (kube-state-metrics). 0 = DOWN. Uses the same signal as the CloudForgeServiceUnavailable / CloudForgePostgresDown alerts, so it also shows DOWN when a service is scaled to 0 (the 'up' metric would just disappear instead).",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "max by (deployment) (kube_deployment_status_replicas_available{namespace=\"cloudforge\"})", "legendFormat": "{{deployment}}", "instant": true },
+        { "refId": "B", "expr": "max by (statefulset) (kube_statefulset_status_replicas_ready{namespace=\"cloudforge\"})", "legendFormat": "{{statefulset}}", "instant": true }
+      ],
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "vertical",
+        "justifyMode": "center"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+            { "type": "range", "options": { "from": 1, "to": 1000, "result": { "text": "UP", "color": "green" } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Orders paid",
+      "description": "Paid orders in the selected time range.",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "round(sum(increase(voltcart_orders_total{namespace=\"cloudforge\", status=\"PAID\"}[$__range])))", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "green" } }, "overrides": [] }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Payments failed",
+      "description": "Orders whose payment was declined or failed in the selected time range.",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "round(sum(increase(voltcart_orders_total{namespace=\"cloudforge\", status=\"PAYMENT_FAILED\"}[$__range])))", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 5 } ] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Revenue",
+      "description": "Value of paid orders in the selected time range.",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "sum(increase(voltcart_revenue_total{namespace=\"cloudforge\"}[$__range]))", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "blue" } }, "overrides": [] }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Pod restarts (1h)",
+      "description": "Container restarts in the cloudforge namespace during the last hour.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "round(sum(increase(kube_pod_container_status_restarts_total{namespace=\"cloudforge\"}[1h])))", "instant": true }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "colorMode": "value", "graphMode": "none", "textMode": "value" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 3 } ] }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Request rate by service",
+      "description": "HTTP requests per second, excluding health and metrics endpoints.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (application) (rate(http_server_requests_seconds_count{namespace=\"cloudforge\", uri!~\"/actuator.*\"}[$__rate_interval]))", "legendFormat": "{{application}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Error rate (5xx) by service",
+      "description": "Share of requests that returned a 5xx server error.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (application) (rate(http_server_requests_seconds_count{namespace=\"cloudforge\", status=~\"5..\"}[$__rate_interval])) / sum by (application) (rate(http_server_requests_seconds_count{namespace=\"cloudforge\"}[$__rate_interval]))",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never", "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.05 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "p95 latency by service",
+      "description": "95% of requests finished faster than this.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (application, le) (rate(http_server_requests_seconds_bucket{namespace=\"cloudforge\", uri!~\"/actuator.*\"}[$__rate_interval])))",
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never", "thresholdsStyle": { "mode": "line" } },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Orders per minute by status",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (status) (rate(voltcart_orders_total{namespace=\"cloudforge\"}[$__rate_interval])) * 60", "legendFormat": "{{status}}" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "min": 0, "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "stacking": { "mode": "normal" } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "PAID" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "id": "byName", "options": "PAYMENT_FAILED" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "JVM heap used by service",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (application) (jvm_memory_used_bytes{namespace=\"cloudforge\", area=\"heap\"})", "legendFormat": "{{application}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0, "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "CPU usage by pod",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{namespace=\"cloudforge\", container!=\"\"}[$__rate_interval]))", "legendFormat": "{{pod}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    }
+  ]
+}

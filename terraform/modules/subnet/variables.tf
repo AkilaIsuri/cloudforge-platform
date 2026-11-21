@@ -16,11 +16,16 @@ variable "availability_zone" {
 variable "subnet_name" {
   description = "Name of the subnet"
   type        = string
-
 }
 
 variable "map_public_ip_on_launch" {
   description = "Whether instances launched in the subnet should receive a public IP"
   type        = bool
   default     = false
+}
+
+variable "tags" {
+  description = "Extra tags, e.g. the Kubernetes load balancer discovery tags"
+  type        = map(string)
+  default     = {}
 }

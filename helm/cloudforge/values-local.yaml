@@ -1,0 +1,23 @@
+# Local Kubernetes (Docker Desktop). Uses the images built by `docker compose build`.
+
+global:
+  imageRepositoryPrefix: cloudforge
+  imageTag: local
+  imagePullPolicy: IfNotPresent
+
+services:
+  api-gateway:
+    env:
+      # Browser origins the gateway accepts (CORS). Must match the URL you open VoltCart on,
+      # otherwise POST requests (register, checkout) are rejected with 403.
+      CORS_ALLOWED_ORIGINS: "http://localhost:30080,http://localhost:8088,http://localhost:5173"
+
+frontend:
+  service:
+    # Docker Desktop exposes NodePorts on localhost: http://localhost:30080
+    type: NodePort
+    port: 80
+    nodePort: 30080
+
+postgres:
+  storage: 1Gi

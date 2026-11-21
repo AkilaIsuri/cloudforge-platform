@@ -1,0 +1,32 @@
+# Argo CD Application: keeps the cloudforge namespace on EKS in sync with Git.
+#   kubectl apply -f argocd/cloudforge-app.yaml
+#
+# Flow: CI pushes images and writes the new tag into helm/cloudforge/values-eks.yaml on main
+#       → Argo CD sees the commit → renders the Helm chart → applies the changes.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cloudforge
+  namespace: argocd
+  # Deleting this Application also deletes everything it deployed (incl. the AWS load balancer),
+  # which must happen before `terraform destroy`
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/AkilaIsuri/cloudforge-platform.git
+    targetRevision: main
+    path: helm/cloudforge
+    helm:
+      valueFiles:
+        - values-eks.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloudforge
+  syncPolicy:
+    automated:
+      prune: true    # delete resources that were removed from Git
+      selfHeal: true # undo manual changes made with kubectl
+    syncOptions:
+      - CreateNamespace=true

@@ -1,0 +1,183 @@
+# CloudForge CI/CD
+#
+#   Pull request / push to main:  test (5 Spring services + frontend) → SonarCloud analysis
+#   Push to main only:            build 6 images → Trivy scan → push to ECR → bump the image tag
+#                                 in helm/cloudforge/values-eks.yaml → Argo CD deploys it to EKS
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# AWS account: GitHub → Settings → Secrets and variables → Actions → Variables → AWS_ACCOUNT_ID
+# (falls back to the CloudForge account if the variable is not set)
+env:
+  AWS_REGION: us-east-1
+  AWS_ROLE_ARN: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID || '125610095979' }}:role/cloudforge-github-actions-role
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Unit tests + coverage for each Spring Boot service (in parallel)
+  # ---------------------------------------------------------------------------
+  test-backend:
+    name: Test ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [user-service, product-service, order-service, payment-service, api-gateway]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: applications/${{ matrix.service }}/pom.xml
+
+      - name: Run tests (mvn verify, with JaCoCo coverage)
+        working-directory: applications/${{ matrix.service }}
+        run: mvn -B -ntp verify
+
+      # Compiled classes + coverage report are needed by the SonarCloud job
+      - name: Upload build output for SonarCloud
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.service }}
+          path: |
+            applications/${{ matrix.service }}/target/classes
+            applications/${{ matrix.service }}/target/site/jacoco/jacoco.xml
+          retention-days: 3
+
+  # ---------------------------------------------------------------------------
+  # 2. Frontend build check
+  # ---------------------------------------------------------------------------
+  test-frontend:
+    name: Build frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install and build
+        working-directory: applications/frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+
+  # ---------------------------------------------------------------------------
+  # 3. Static code analysis (bugs, code smells, vulnerabilities, coverage)
+  # ---------------------------------------------------------------------------
+  sonarcloud:
+    name: SonarCloud analysis
+    needs: test-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history: SonarCloud needs it to detect new code
+
+      - name: Download build output of all services
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: sonar-build
+
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          args: >
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION || 'akilaisuri' }}
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || 'AkilaIsuri_cloudforge-platform' }}
+            -Dsonar.projectName=CloudForge
+            -Dsonar.sources=applications
+            -Dsonar.exclusions=**/src/test/**,**/node_modules/**,**/dist/**,**/public/images/**
+            -Dsonar.tests=applications
+            -Dsonar.test.inclusions=**/src/test/**
+            -Dsonar.java.binaries=sonar-build/*/classes
+            -Dsonar.coverage.jacoco.xmlReportPaths=sonar-build/*/site/jacoco/jacoco.xml
+
+  # ---------------------------------------------------------------------------
+  # 4. Build, scan and push images (main branch only)
+  # ---------------------------------------------------------------------------
+  build-scan-push:
+    name: Image ${{ matrix.service }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC login to AWS – no access keys stored in GitHub
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [user-service, product-service, order-service, payment-service, api-gateway, frontend]
+    env:
+      IMAGE: ${{ vars.AWS_ACCOUNT_ID || '125610095979' }}.dkr.ecr.us-east-1.amazonaws.com/${{ matrix.service }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t "$IMAGE" applications/${{ matrix.service }}
+
+      # Security gate: stop the release if the image has CRITICAL vulnerabilities that have a fix
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push image
+        run: docker push "$IMAGE"
+
+  # ---------------------------------------------------------------------------
+  # 5. GitOps: record the new image tag in Git – Argo CD deploys it
+  # ---------------------------------------------------------------------------
+  update-manifest:
+    name: Update image tag for Argo CD
+    needs: build-scan-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set global.imageTag in values-eks.yaml
+        run: |
+          sed -i "s/^  imageTag: .*/  imageTag: \"${GITHUB_SHA}\"/" helm/cloudforge/values-eks.yaml
+          grep -n "imageTag" helm/cloudforge/values-eks.yaml
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add helm/cloudforge/values-eks.yaml
+          if git diff --cached --quiet; then
+            echo "Image tag already up to date"; exit 0
+          fi
+          git commit -m "deploy: VoltCart images ${GITHUB_SHA::7}"
+          git pull --rebase origin main
+          git push origin HEAD:main

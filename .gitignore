@@ -22,6 +22,7 @@ terraform.rc
 # Environment files
 .env
 .env.*
+!.env.example
 
 # IDE / Editor
 .idea/
@@ -42,6 +43,7 @@ target/
 # Terraform sensitive/local files
 *.tfplan
 *.tfplan.json
+tfplan
 
 
 # Kubernetes secrets

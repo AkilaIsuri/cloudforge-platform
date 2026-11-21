@@ -1,14 +1,125 @@
-userService:
-  replicaCount: 3
+# Shared defaults for every environment.
+# Environment files override these:
+#   values-local.yaml  – Docker Desktop Kubernetes / Minikube
+#   values-eks.yaml    – Amazon EKS
+#
+# Install locally:
+#   helm upgrade --install cloudforge helm/cloudforge -n cloudforge --create-namespace \
+#     -f helm/cloudforge/values-local.yaml
 
-  image:
-    repository: 761558631184.dkr.ecr.us-east-1.amazonaws.com/user-service
-    tag: "fc68c82cb3ed385cf85412319dde07880f701c3b"
-    pullPolicy: IfNotPresent
+global:
+  # Image = <imageRepositoryPrefix>/<service image>:<tag>
+  imageRepositoryPrefix: cloudforge
+  imageTag: local
+  imagePullPolicy: IfNotPresent
+  # Kubernetes Secret with keys "username" and "password" (created outside Git)
+  dbSecretName: postgres-secret
 
-  containerPort: 8080
+# Defaults applied to every Spring Boot service unless the service overrides them
+springDefaults:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 384Mi
+    limits:
+      cpu: 1000m
+      memory: 768Mi
 
+# Spring Boot services. Each gets a Deployment + ClusterIP Service on port 8080.
+# "database" wires SPRING_DATASOURCE_* to that Postgres database.
+services:
+  user-service:
+    image: user-service
+    tag: ""            # empty = global.imageTag
+    database: users_db
+
+  product-service:
+    image: product-service
+    tag: ""
+    database: products_db
+
+  payment-service:
+    image: payment-service
+    tag: ""
+    database: payments_db
+    env:
+      PAYMENT_MAX_APPROVED_AMOUNT: "5000"
+
+  order-service:
+    image: order-service
+    tag: ""
+    database: orders_db
+    env:
+      USER_SERVICE_URL: http://user-service:8080
+      PRODUCT_SERVICE_URL: http://product-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8080
+
+  api-gateway:
+    image: api-gateway
+    tag: ""
+    env:
+      USER_SERVICE_URL: http://user-service:8080
+      PRODUCT_SERVICE_URL: http://product-service:8080
+      ORDER_SERVICE_URL: http://order-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8080
+
+# VoltCart web app (nginx). The only component exposed outside the cluster.
+frontend:
+  image: frontend
+  tag: ""
+  replicas: 1
+  apiGatewayUrl: http://api-gateway:8080
   service:
-    type: LoadBalancer
-    port: 8080
-    targetPort: 8080
+    type: ClusterIP
+    port: 80
+    nodePort: null
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+# StorageClass created by this chart (EKS: encrypted gp3 via the EBS CSI driver).
+# Off by default – local clusters already have a default StorageClass.
+storageClass:
+  create: false
+  name: gp3
+
+postgres:
+  image: postgres:16-alpine
+  databases:
+    - users_db
+    - products_db
+    - orders_db
+    - payments_db
+  storage: 1Gi
+  # Empty = the cluster's default StorageClass (hostpath on Docker Desktop, gp2/gp3 on EKS)
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # Backup & recovery: pg_dump of every database to a separate disk
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"     # every day at 02:00 UTC
+    retention: 7              # keep the newest 7 backups
+    storage: 2Gi
+    restoreBackupId: ""       # empty = restore the newest backup
+
+# Prometheus scraping, Grafana dashboard and alert rules. The ServiceMonitor and
+# PrometheusRule are only created when the Prometheus Operator CRDs exist in the
+# cluster (kube-prometheus-stack, installed with release name "monitoring").
+monitoring:
+  enabled: true
+  prometheusRelease: monitoring
+  dashboards:
+    enabled: true      # ConfigMap picked up by Grafana's sidecar
+  alerts:
+    enabled: true      # PrometheusRule: availability, errors, latency, payments

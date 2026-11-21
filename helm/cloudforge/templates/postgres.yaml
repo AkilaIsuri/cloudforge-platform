@@ -1,0 +1,128 @@
+{{- $pg := .Values.postgres }}
+# Creates one database per microservice the first time the volume is initialised
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  labels:
+    app: postgres
+    {{- include "cloudforge.labels" . | nindent 4 }}
+data:
+  01-create-databases.sql: |
+    {{- range $pg.databases }}
+    CREATE DATABASE {{ . }};
+    {{- end }}
+---
+# Stable address the services connect to: postgres:5432
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+    {{- include "cloudforge.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+# Headless Service required by the StatefulSet (gives the pod a stable DNS name)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  labels:
+    app: postgres
+    {{- include "cloudforge.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+    {{- include "cloudforge.labels" . | nindent 4 }}
+spec:
+  serviceName: postgres-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        {{- include "cloudforge.labels" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: postgres
+          image: {{ $pg.image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.dbSecretName }}
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.dbSecretName }}
+                  key: password
+            - name: POSTGRES_DB
+              value: postgres
+            # Use a sub-folder: cloud disks contain "lost+found", which makes Postgres
+            # think the volume is not empty and skip initialisation
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U \"$POSTGRES_USER\" -d postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+          resources:
+            {{- toYaml $pg.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  # Persistent disk per pod: data survives pod restarts and rescheduling
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with $pg.storageClassName }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ $pg.storage }}

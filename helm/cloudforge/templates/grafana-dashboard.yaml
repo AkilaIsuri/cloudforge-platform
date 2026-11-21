@@ -1,0 +1,13 @@
+{{- /* Grafana's sidecar (kube-prometheus-stack) loads every ConfigMap labelled grafana_dashboard: "1" */}}
+{{- if and .Values.monitoring.enabled .Values.monitoring.dashboards.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voltcart-dashboard
+  labels:
+    grafana_dashboard: "1"
+    {{- include "cloudforge.labels" . | nindent 4 }}
+data:
+  voltcart-overview.json: |-
+{{ .Files.Get "dashboards/voltcart-overview.json" | indent 4 }}
+{{- end }}

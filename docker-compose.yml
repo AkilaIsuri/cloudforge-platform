@@ -1,28 +1,139 @@
+# CloudForge – full local stack
+#   docker compose up --build
+#   Shop:      http://localhost:3000
+#   Gateway:   http://localhost:8080/api/products
+#
+# Credentials come from .env (see .env.example); the defaults below are for local use only.
+
+x-db-credentials: &db-credentials
+  SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-cloudforge}
+  SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-cloudforge}
+
+x-spring-healthcheck: &spring-healthcheck
+  test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness || exit 1"]
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 30s
+
 services:
   postgres:
-    image: postgres:16
-    container_name: cloudforge-postgres
-
+    image: postgres:16-alpine
     environment:
-      POSTGRES_DB: cloudforge
-      POSTGRES_USER: cloudforge
-      POSTGRES_PASSWORD: cloudforge
-
+      POSTGRES_USER: ${POSTGRES_USER:-cloudforge}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudforge}
+      POSTGRES_DB: postgres
     ports:
-      - "5433:5432"
-
+      - "5433:5432"            # host 5433 so it doesn't clash with a local Postgres
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
   user-service:
-    image: cloudforge/user-service:1.0
+    build: ./applications/user-service
+    image: cloudforge/user-service:local
+    environment:
+      <<: *db-credentials
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/users_db
+    ports:
+      - "8081:8080"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    healthcheck: *spring-healthcheck
+    restart: unless-stopped
+
+  product-service:
+    build: ./applications/product-service
+    image: cloudforge/product-service:local
+    environment:
+      <<: *db-credentials
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/products_db
+    ports:
+      - "8082:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck: *spring-healthcheck
+    restart: unless-stopped
+
+  payment-service:
+    build: ./applications/payment-service
+    image: cloudforge/payment-service:local
+    environment:
+      <<: *db-credentials
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/payments_db
+      PAYMENT_MAX_APPROVED_AMOUNT: "5000"
+    ports:
+      - "8084:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck: *spring-healthcheck
+    restart: unless-stopped
+
+  order-service:
+    build: ./applications/order-service
+    image: cloudforge/order-service:local
+    environment:
+      <<: *db-credentials
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/orders_db
+      USER_SERVICE_URL: http://user-service:8080
+      PRODUCT_SERVICE_URL: http://product-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8080
+    ports:
+      - "8083:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+      payment-service:
+        condition: service_healthy
+    healthcheck: *spring-healthcheck
+    restart: unless-stopped
+
+  api-gateway:
+    build: ./applications/api-gateway
+    image: cloudforge/api-gateway:local
+    environment:
+      USER_SERVICE_URL: http://user-service:8080
+      PRODUCT_SERVICE_URL: http://product-service:8080
+      ORDER_SERVICE_URL: http://order-service:8080
+      PAYMENT_SERVICE_URL: http://payment-service:8080
     ports:
       - "8080:8080"
+    depends_on:
+      - user-service
+      - product-service
+      - order-service
+      - payment-service
+    healthcheck: *spring-healthcheck
+    restart: unless-stopped
+
+  frontend:
+    build: ./applications/frontend
+    image: cloudforge/frontend:local
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/cloudforge
-      SPRING_DATASOURCE_USERNAME: cloudforge
-      SPRING_DATASOURCE_PASSWORD: cloudforge
+      API_GATEWAY_URL: http://api-gateway:8080
+    ports:
+      - "3000:8080"
+    depends_on:
+      - api-gateway
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
 volumes:
-  postgres_data:
+  pgdata:
