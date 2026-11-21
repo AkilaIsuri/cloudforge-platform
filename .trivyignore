@@ -12,3 +12,20 @@ CVE-2026-47884 exp:2027-02-28
 # (all endpoints return JSON from @RestController).
 # Plan: upgrade to Spring Boot 4 / Spring Framework 7.
 CVE-2026-47890 exp:2027-02-28
+
+# Spring Framework 6.2.x (spring-webflux, api-gateway): header-predicate bypass in WebFlux *functional
+# endpoints*; no fixed 6.2.x release, fix only in 7.0.x.
+# Not exploitable here: the gateway defines no functional endpoints (no RouterFunction /
+# RequestPredicates / HandlerFunction); routing uses Spring Cloud Gateway's RouteLocator path predicates.
+# Accepted by the project owner on 2026-11-21. Plan: upgrade to Spring Boot 4 / Spring Framework 7.
+CVE-2026-47892 exp:2027-02-28
+
+# nginx 1.30.6 (frontend base image nginxinc/nginx-unprivileged:1.30.6-alpine): fixed in nginx 1.30.7,
+# but no nginx-unprivileged image with 1.30.7 was published yet (checked 2026-11-21).
+# Not exploitable here: VoltCart's nginx serves plain HTTP/1.1 on port 8080 only – no http2, no
+# http3/quic, no ssl, no mail module (TLS/HTTP2 to the internet are handled by the AWS load balancer).
+# Accepted by the project owner on 2026-11-21 with a SHORT expiry. Plan: bump to the 1.30.7 image.
+CVE-2026-113425 exp:2026-12-31
+CVE-2026-121810 exp:2026-12-31
+CVE-2026-123007 exp:2026-12-31
+CVE-2026-123633 exp:2026-12-31
