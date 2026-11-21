@@ -1,197 +1,124 @@
-# CloudForge
+# CloudForge – Internal Developer Platform
 
-## Project Overview
+CloudForge is a cloud-native platform that takes application code from a developer's commit to a
+running, monitored service on AWS – automatically built, tested, security-scanned and deployed.
+It is demonstrated with **VoltCart**, a multi-service e-commerce shop.
 
-CloudForge is a production-ready Internal Developer Platform (IDP) built to demonstrate modern DevOps, DevSecOps, and Platform Engineering practices.
-
-## Objectives
-
-- Provision infrastructure using Terraform
-- Deploy applications to Kubernetes
-- Implement GitOps with Argo CD
-- Build CI/CD with GitHub Actions
-- Secure workloads using DevSecOps practices
-- Monitor the platform with Prometheus, Grafana, Loki, and Tempo
+```
+git push ─► GitHub Actions ─► tests · SonarCloud · Trivy ─► Amazon ECR ─► Git (image tag) ─► Argo CD ─► Amazon EKS
+                                                                                                │
+                                                                       Prometheus · Grafana · alerts ◄┘
+```
 
 ## Architecture
 
-Coming Soon
-
-## Roadmap
-
-- [ ] Local development with Docker Compose
-- [ ] Local Kubernetes
-- [ ] AWS Infrastructure
-- [ ] Amazon EKS
-- [ ] CI/CD
-- [ ] GitOps
-- [ ] Observability
-- [ ] Security
-
-## Running the Application on Local Kubernetes with Minikube
-
-The application can be deployed locally on Kubernetes using Minikube.
-
-### Prerequisites
-
-Make sure the following are installed:
-
-Docker Desktop
-
-kubectl
-
-Minikube
-
-Verify the installations:
-
-docker --version
-kubectl version --client
-minikube version
-
-1. Start Minikube
-
-Start the local Kubernetes cluster using the Docker driver:
-
-minikube start --driver=docker
-
-Verify the cluster:
-
-kubectl get nodes
-
-Expected:
-
-NAME       STATUS   ROLES           AGE   VERSION
-minikube   Ready    control-plane   ...   ...
-
-2. Create Kubernetes Secret
-
-Database credentials are stored using a Kubernetes Secret instead of hard-coding them in the Deployment files.
-
-kubectl create secret generic postgres-secret \
-  --from-literal=username=cloudforge \
-  --from-literal=password=cloudforge
-
-Verify:
-
-kubectl get secrets
-
-3. Build the Docker Image Inside Minikube
-
-Configure the current terminal to use Minikube's Docker daemon:
-
-eval $(minikube docker-env)
-
-Navigate to the user-service:
-
-cd applications/user-service
-
-Build the image:
-
-docker build -t cloudforge/user-service:1.0 .
-
-This allows Kubernetes to use the locally built image without pushing it to Docker Hub.
-
-4. Deploy the Kubernetes Resources
-
-Navigate to the Kubernetes manifests:
-
-cd ../../k8s
-
-Apply the manifests:
-
-kubectl apply -f .
-
-This creates the PostgreSQL and user-service Deployments and Services.
-
-5. Verify the Deployment
-
-Check the Pods:
-
-kubectl get pods
-
-Check the Services:
-
-kubectl get services
-
-PostgreSQL runs internally using a ClusterIP Service, while the user-service is exposed using a NodePort.
-
-6. Access the Application
-
-Run:
-
-minikube service user-service
-
-Minikube will provide a URL for accessing the application locally.
-
-Kubernetes Architecture
-
-                    Minikube Cluster
-                 ┌─────────────────────┐
-                 │                     │
-                 │  User Service       │
-                 │  Spring Boot :8080  │
-                 │         │           │
-                 │         ▼           │
-                 │  PostgreSQL :5432   │
-                 │                     │
-                 └─────────┬───────────┘
-                           │
-                       NodePort
-                           │
-                           ▼
-                    Local Browser
-
-Kubernetes Concepts Used
-
-Deployment – manages application Pods.
-
-Pod – runs the application container.
-
-Service – provides stable networking between Pods.
-
-ClusterIP – provides internal PostgreSQL communication.
-
-NodePort – exposes the user-service outside the cluster.
-
-Secret – stores database credentials separately from Deployment configuration.
-
-Minikube – provides a local Kubernetes cluster for development and testing.
-
-Troubleshooting
-
-Minikube profile error: Minikube failed because its existing profile files were missing; the cluster was recreated using minikube delete followed by minikube start --driver=docker.
-
-Secret not found: Pods entered CreateContainerConfigError because postgres-secret did not exist; the Secret was created using kubectl create secret.
-
-ImagePullBackOff: Kubernetes could not pull the cloudforge/user-service:1.0 image because it was only available locally; the image was rebuilt inside Minikube's Docker environment using eval $(minikube docker-env).
-
-Service unavailable: minikube service user-service initially failed because the user-service Pod was not running; kubectl get pods and kubectl describe pod were used to identify and troubleshoot the issue.
-
-Useful Commands
-
-### Start Minikube
-minikube start --driver=docker
-
-### Check cluster
-kubectl get nodes
-
-### Check Pods
-kubectl get pods
-
-### Check Services
-kubectl get services
-
-### View Pod details
-kubectl describe pod <pod-name>
-
-### View application logs
-kubectl logs <pod-name>
-
-### Apply Kubernetes manifests
-kubectl apply -f .
-
-### Access the application
-minikube service user-service
-
-### Stop Minikube
-minikube stop
+```mermaid
+flowchart LR
+    dev([Developer]) -->|pull request| gh[GitHub repo]
+    gh --> ci["GitHub Actions<br/>tests · SonarCloud · Checkov<br/>Trivy image scan"]
+    ci -->|push images via OIDC| ecr[(Amazon ECR)]
+    ci -->|commit new image tag| gh
+    gh -->|watches main| argo[Argo CD]
+
+    subgraph aws["AWS us-east-1 · VPC 10.0.0.0/16 (Terraform)"]
+        lb[AWS load balancer<br/>public subnets]
+        subgraph eks["Amazon EKS · private subnets"]
+            argo
+            fe[frontend<br/>React + nginx]
+            gw[api-gateway<br/>Spring Cloud Gateway]
+            us[user-service]
+            ps[product-service]
+            os[order-service]
+            pay[payment-service]
+            db[(PostgreSQL<br/>StatefulSet + EBS gp3)]
+            mon[Prometheus · Grafana<br/>Alertmanager]
+        end
+    end
+
+    user([Customer]) --> lb --> fe -->|/api| gw
+    gw --> us & ps & os & pay
+    os --> us & ps & pay
+    us & ps & os & pay --> db
+    argo -->|deploys Helm chart| fe
+    ecr -.->|images| eks
+    mon -.->|scrapes /actuator/prometheus| gw
+```
+
+More detail: [docs/architecture.md](docs/architecture.md).
+
+## VoltCart – the demo application
+
+| Component | Technology | Responsibility |
+|---|---|---|
+| `frontend` | React 18 + Vite, served by non-root nginx | Shop UI; nginx proxies `/api` to the gateway |
+| `api-gateway` | Spring Cloud Gateway (WebFlux) | Single entry point, routes `/api/<service>/**` |
+| `user-service` | Spring Boot 3.5, Java 21 | Customers (`users_db`) |
+| `product-service` | Spring Boot 3.5, Java 21 | Catalogue and stock (`products_db`) |
+| `order-service` | Spring Boot 3.5, Java 21 | Places orders: checks user → reserves stock → takes payment → releases stock if payment fails (`orders_db`) |
+| `payment-service` | Spring Boot 3.5, Java 21 | Mock payments: declines amounts above $5,000 (`payments_db`) |
+| PostgreSQL 16 | StatefulSet + PersistentVolume | One database per service, daily backups |
+
+## Platform tech stack
+
+| Layer | Tools |
+|---|---|
+| Containers | Docker (multi-stage, non-root images), Docker Compose |
+| Orchestration | Kubernetes – Docker Desktop locally, Amazon EKS in AWS |
+| Packaging | Helm chart `helm/cloudforge` (one generic template for all Spring services) |
+| Infrastructure as Code | Terraform – VPC, subnets, NAT, EKS, node group, EBS CSI driver, ECR, IAM, GitHub OIDC |
+| CI/CD | GitHub Actions |
+| GitOps | Argo CD (auto-sync, prune, self-heal) |
+| Security | SonarCloud (SAST + coverage), Trivy (image + config), Checkov (Terraform + Kubernetes), OIDC instead of access keys, SHA-pinned actions, Dependabot |
+| Observability | Prometheus, Grafana, Alertmanager (kube-prometheus-stack), Spring Boot Actuator / Micrometer |
+
+## Repository layout
+
+```
+applications/        6 services (each with Dockerfile + tests) – see table above
+database/init/       SQL that creates the 4 databases (Docker Compose)
+docker-compose.yml   full local stack
+helm/cloudforge/     Helm chart: services, frontend, Postgres, backups, dashboard, alerts
+  values-local.yaml    local Kubernetes   ·   values-eks.yaml   Amazon EKS (image tag set by CI)
+helm/monitoring/     kube-prometheus-stack values
+terraform/           AWS infrastructure (modules: vpc, subnet, eks, ecr, iam)
+argocd/              Argo CD Application (GitOps)
+.github/workflows/   ci-cd.yml (build/test/scan/deploy), iac-security.yml (Checkov, Trivy config)
+docs/                architecture, deployment guide, operations, security, troubleshooting
+```
+
+`k8s/` and the YAML files in the repository root are from the project's early Minikube phase and are
+no longer used.
+
+## Quick start (local)
+
+```bash
+docker compose up --build          # first build takes a few minutes
+open http://localhost:3000         # VoltCart
+```
+
+Local Kubernetes, AWS and GitOps: [docs/deployment-guide.md](docs/deployment-guide.md).
+
+## Project deliverables
+
+| # | Deliverable | Where |
+|---|---|---|
+| 1 | Multi-service e-commerce application | `applications/` |
+| 2 | Dockerized frontend, gateway and backend services | `applications/*/Dockerfile`, `docker-compose.yml` |
+| 3 | Persistent PostgreSQL with backup and recovery | `helm/cloudforge/templates/postgres*.yaml`, [operations](docs/operations.md#backup-and-recovery) |
+| 4 | Terraform-managed AWS infrastructure | `terraform/` |
+| 5 | EKS environment running the application | [deployment guide](docs/deployment-guide.md#3-aws-with-terraform) |
+| 6 | Amazon ECR repositories for service images | `terraform/modules/ecr` |
+| 7 | Automated CI/CD with GitHub Actions | `.github/workflows/ci-cd.yml` |
+| 8 | GitOps deployments with Argo CD | `argocd/cloudforge-app.yaml` |
+| 9 | Integrated security scanning | [docs/security.md](docs/security.md) |
+| 10 | Prometheus and Grafana dashboards and alerts | `helm/cloudforge/dashboards`, `templates/prometheus-rules.yaml`, [operations](docs/operations.md#monitoring) |
+| 11 | Kubernetes health checks and self-healing demonstrations | `templates/spring-services.yaml` (probes), [operations](docs/operations.md#self-healing-demonstrations) |
+| 12 | Architecture, implementation and troubleshooting documentation | `docs/` – incl. [11 documented issues](docs/Issues.md) |
+
+## Documentation
+
+- [Architecture](docs/architecture.md) – components, AWS network, CI/CD and GitOps flow, design decisions
+- [Deployment guide](docs/deployment-guide.md) – Docker Compose → local Kubernetes → AWS → teardown
+- [Operations](docs/operations.md) – monitoring, alerts, backup/restore, self-healing demos
+- [Security](docs/security.md) – DevSecOps controls, scan results, accepted risks
+- [Issues and troubleshooting](docs/Issues.md) – 11 real problems: problem, root cause, solution, how it was diagnosed
