@@ -4,7 +4,7 @@
 global:
   # ECR registry of the CloudForge AWS account (terraform output ecr_registry)
   imageRepositoryPrefix: 125610095979.dkr.ecr.us-east-1.amazonaws.com
-  imageTag: "b700ec00eb205a96253fd1beda78a80c40d68f45"
+  imageTag: "9fdfec9aed6dbfa375ada36c1a8df615ffc6fd2d"
   imagePullPolicy: IfNotPresent
 
 springDefaults:
