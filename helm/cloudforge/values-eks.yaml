@@ -13,9 +13,10 @@ springDefaults:
 services:
   api-gateway:
     env:
-      # Set to the VoltCart load balancer URL once it exists, e.g.
-      # "http://a1b2c3-123456.us-east-1.elb.amazonaws.com" (see docs/Issues.md #2)
-      CORS_ALLOWED_ORIGINS: "http://localhost:8088"
+      # Browser origins allowed by the gateway (see docs/Issues.md #2): the VoltCart AWS load balancer
+      # URL, plus localhost:8088 for `kubectl port-forward`. The load balancer URL changes if the
+      # frontend Service or the cluster is recreated – update it here then.
+      CORS_ALLOWED_ORIGINS: "http://a52c4e80260eb4c16a64d4e230c139aa-1885552927.us-east-1.elb.amazonaws.com,http://localhost:8088"
 
 frontend:
   replicas: 2
