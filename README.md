@@ -86,9 +86,6 @@ argocd/              Argo CD Application (GitOps)
 docs/                architecture, deployment guide, operations, security, troubleshooting
 ```
 
-`k8s/` and the YAML files in the repository root are from the project's early Minikube phase and are
-no longer used.
-
 ## Quick start (local)
 
 ```bash
