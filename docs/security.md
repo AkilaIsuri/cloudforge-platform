@@ -44,6 +44,26 @@ First analysis (PR #1): **22 reliability/security findings, 0 security hotspots,
 | Unhandled promises, buttons without `type` (React) | 4 | `void run(...)`, explicit `type` |
 | Client-side request forgery (user ID from browser storage into a URL) | 1 | IDs validated as positive integers, query built with `URLSearchParams` |
 
+After this change SonarCloud closed **23 issues** on `main`: **0 bugs (reliability A)**, maintainability
+**A**, **0 security hotspots**, **0 % duplication**, **0 new issues**. The 29 issues still open were all
+in **legacy files no longer used** – the early Kompose/Minikube manifests (`k8s/`, root
+`*-deployment.yaml` with a plain-text demo password) and a copy of the kube-prometheus-stack default
+values (example password hashes from the upstream chart). These files were deleted. The demo password
+`cloudforge` remains in Git history; it was only ever used for local development – the clusters use a
+random password from a Kubernetes Secret.
+
+The quality gate still fails on one condition: **coverage of new code** (the frontend has no tests –
+see [known gaps](#4-known-gaps-and-future-work)). Overall coverage: **40 %**.
+
+### Dependabot
+
+The first Dependabot run opened **31 pull requests at once**, including major upgrades that would
+have broken the build (Spring Boot 3.5 → 4.1, Java 21 → 24/26 base images, a React plugin major that
+already failed its checks). They were closed unmerged, and the configuration was changed to
+**monthly, grouped (one PR per ecosystem), minor and patch updates only**. Major upgrades are planned
+deliberately (Spring Boot 4 is listed under future work). Lesson: automated dependency updates need
+policy (grouping, schedule, version limits), or they create more risk and noise than they remove.
+
 ### Checkov / Trivy config
 
 Run on every PR (report-only; full results in the *IaC security scan* job logs). Known design choices
@@ -54,9 +74,6 @@ in this project that such scanners flag, and why they were kept:
 | EKS API endpoint publicly reachable | `kubectl` from a laptop | Restrict `public_access_cidrs`, or private endpoint + VPN |
 | No EKS control-plane logging, no KMS envelope encryption of Secrets | Cost and simplicity | Enable both |
 | ECR: AES-256 instead of KMS, mutable tags | CI pushes unique commit-SHA tags; re-running a job may push the same tag | KMS key, `IMMUTABLE` tags |
-
-<!-- TODO: add the Checkov "Passed / Failed checks" counts from the latest IaC security scan run -->
-
 ## 3. Accepted risks
 
 Accepted by the project owner only when **no fixed version is available in the current line** and the
